@@ -1,0 +1,37 @@
+[
+  {
+    "name": "X daily drafts",
+    "cadence": "Daily",
+    "purpose": "Drafts tweets into the X Daily Tweets DB in Isaac's voice, governed by the Constitution."
+  },
+  {
+    "name": "LinkedIn drafts",
+    "cadence": "Mon / Wed / Fri",
+    "purpose": "Drafts LinkedIn posts into the LinkedIn Posts DB."
+  },
+  {
+    "name": "IG Story drafts",
+    "cadence": "Weekly",
+    "purpose": "Drafts IG Story posts (manual publish lane)."
+  },
+  {
+    "name": "IG Carousel drafts",
+    "cadence": "Weekly",
+    "purpose": "Drafts carousel concepts; Canva production before posting."
+  },
+  {
+    "name": "Sunday cleanup",
+    "cadence": "Sun",
+    "purpose": "Deletes past-dated unposted X/LinkedIn drafts. Must skip Queued items — coordinate before enabling the publisher."
+  },
+  {
+    "name": "Command Center publisher",
+    "cadence": "07:00 & 17:00 SGT",
+    "purpose": "This app's Vercel cron: schedules Approved X/LinkedIn drafts into Typefully."
+  },
+  {
+    "name": "Command Center reconciler",
+    "cadence": "Hourly",
+    "purpose": "This app's Vercel cron: confirms Typefully publishes and writes Posted back to Notion."
+  }
+]

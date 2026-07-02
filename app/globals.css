@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme {
+  /* Mission Control ground (PRD §5.2) */
+  --color-ground: #121316;
+  --color-panel: #0e0f11;
+  --color-ink: #e8e8e3;
+  --color-ink-dim: #9a9b94;
+  --color-slate: #8a8f98;
+  --color-hairline: rgba(255, 255, 255, 0.12);
+  --color-hairline-faint: rgba(255, 255, 255, 0.06);
+  --color-oxblood: #7d0607;
+  --color-oxbright: #a61b1c;
+  --color-phosphor: #5a7d5a;
+  --color-amber: #8f7a45;
+
+  --font-sans: var(--font-grotesk), system-ui, sans-serif;
+  --font-serif: var(--font-newsreader), Georgia, serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+/* Faint 8px grid on the ground, ≤3% opacity — instrument panel, not neon. */
+.scanlines {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+  background-size: 8px 8px;
+}
+
+::selection {
+  background: #7d0607;
+  color: #e8e8e3;
+}
+
+/* Status dot — pulses (2s ease) only for QUEUED. */
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+.dot-pulse {
+  animation: dot-pulse 2s ease-in-out infinite;
+}
+
+@keyframes ticker-fade {
+  0% { opacity: 0; transform: translateY(4px); }
+  8%, 92% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-4px); }
+}
+.ticker-item {
+  animation: ticker-fade 6s ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot-pulse, .ticker-item {
+    animation: none !important;
+  }
+  * {
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Hairline scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
