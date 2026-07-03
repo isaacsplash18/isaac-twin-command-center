@@ -1,14 +1,15 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApprovalQueue } from "./ApprovalQueue";
 import { BootSequence } from "./BootSequence";
 import { CommandPalette, PaletteAction } from "./CommandPalette";
 import { KpiPanel } from "./KpiPanel";
+import { Nova } from "./Nova";
+import { novaState } from "./novaVoice";
 import { QueuePanel } from "./QueuePanel";
 import { AutomationsPanel, InputsPanel, PositionsPanel } from "./SidePanels";
 import { Ticker } from "./Ticker";
-import { TwinCore } from "./TwinCore";
 import { postAction, useApi } from "./useApi";
 import { ContentItem, PanelsData, PlatformKey, QueueData, formatSgt, twinPulse } from "./types";
 
@@ -46,6 +47,16 @@ export function CommandCenter() {
 
   const data = queue.data;
   const failures = panels.data?.publishFailures ?? [];
+
+  // Nova's mood + rotating line, from real pipeline stats
+  const nova = useMemo(() => novaState(data), [data]);
+  const [novaIdx, setNovaIdx] = useState(0);
+  useEffect(() => {
+    setNovaIdx(0);
+    if (nova.lines.length <= 1) return;
+    const id = setInterval(() => setNovaIdx((i) => (i + 1) % nova.lines.length), 14_000);
+    return () => clearInterval(id);
+  }, [nova]);
 
   const tickerLines = useMemo(() => {
     const lines: string[] = [];
@@ -151,7 +162,6 @@ export function CommandCenter() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <TwinCore size={72} />
           <button
             type="button"
             onClick={async () => {
@@ -188,8 +198,13 @@ export function CommandCenter() {
         </div>
       )}
 
-      {/* Main grid */}
-      <main className="mx-auto grid max-w-6xl gap-4 p-4 sm:p-6 lg:grid-cols-[1fr_380px]">
+      <main className="mx-auto max-w-6xl p-4 sm:p-6">
+        {/* NOVA — the twin, centre stage */}
+        <section aria-label="Nova" className="mb-6 flex justify-center">
+          <Nova mood={nova.mood} line={nova.lines[novaIdx % nova.lines.length]} />
+        </section>
+
+        <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
         <div>
           {queue.loading && !data ? (
             <div className="border border-hairline bg-panel p-8 text-center">
@@ -202,6 +217,7 @@ export function CommandCenter() {
               onTab={setTab}
               onRemoved={removeDraft}
               onError={restoreDraft}
+              onToast={toast}
             />
           )}
         </div>
@@ -221,6 +237,7 @@ export function CommandCenter() {
           <PositionsPanel data={panels.data?.positions} index={3} />
           <InputsPanel inbox={panels.data?.inbox} wiki={panels.data?.wiki} index={4} />
           <AutomationsPanel index={5} />
+        </div>
         </div>
       </main>
 

@@ -17,12 +17,14 @@ export function ApprovalQueue({
   onTab,
   onRemoved,
   onError,
+  onToast,
 }: {
   drafts: ContentItem[];
   tab: PlatformKey | "all";
   onTab: (t: PlatformKey | "all") => void;
   onRemoved: (id: string) => void;
   onError: (id: string, item: ContentItem, message: string) => void;
+  onToast: (message: string) => void;
 }) {
   const visible = drafts.filter((d) => tab === "all" || d.platform === tab);
 
@@ -55,7 +57,7 @@ export function ApprovalQueue({
         <div className="flex flex-col gap-3">
           <AnimatePresence mode="popLayout">
             {visible.map((item, i) => (
-              <DraftCard key={item.id} item={item} index={i} onRemoved={onRemoved} onError={onError} />
+              <DraftCard key={item.id} item={item} index={i} onRemoved={onRemoved} onError={onError} onToast={onToast} />
             ))}
           </AnimatePresence>
         </div>
@@ -69,11 +71,13 @@ function DraftCard({
   index,
   onRemoved,
   onError,
+  onToast,
 }: {
   item: ContentItem;
   index: number;
   onRemoved: (id: string) => void;
   onError: (id: string, item: ContentItem, message: string) => void;
+  onToast: (message: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(item.body);
@@ -81,8 +85,19 @@ function DraftCard({
 
   const act = async (kind: "approve" | "reject") => {
     setBusy(kind);
+    if (kind === "approve") {
+      // Copy while still inside the tap gesture (clipboard API requirement),
+      // so the approved text is ready to paste into the platform app.
+      const clip = [text || item.title, item.slides].filter(Boolean).join("\n\n---\n\n");
+      try {
+        await navigator.clipboard.writeText(clip);
+        onToast("COPIED — PASTE & POST, THEN MARK POSTED");
+      } catch {
+        /* clipboard denied — the manual lane still has a COPY button */
+      }
+      twinPulse("approve");
+    }
     onRemoved(item.id); // optimistic — card leaves immediately
-    if (kind === "approve") twinPulse("approve");
     const res = await postAction(`/api/items/${item.id}/${kind}`);
     if (!res.ok) {
       twinPulse("error");

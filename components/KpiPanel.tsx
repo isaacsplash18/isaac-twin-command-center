@@ -9,38 +9,83 @@ function pct(v: number | null | undefined): string {
   return v == null ? "—" : `${Math.round(v * 100)}%`;
 }
 
-/** Large radial arc gauge — hairline strokes, mono percentage centred (PRD §5.4). */
-function ArcGauge({ value }: { value: number | null }) {
-  const R = 56;
-  const C = Math.PI * R; // semicircle length
+/**
+ * Hi-tech HUD gauge: a perspective-tilted 3D ring (CSS rotateX) with a
+ * glowing oxblood progress arc, an outer tick ring and a slowly rotating
+ * inner dial. Mono digits float upright above the plane.
+ */
+function Gauge3D({ value, windowDays }: { value: number | null; windowDays: number }) {
+  const R = 82;
+  const C = 2 * Math.PI * R;
   const frac = value ?? 0;
+  const ticks = Array.from({ length: 48 }, (_, i) => (i / 48) * Math.PI * 2);
   return (
-    <svg viewBox="0 0 140 84" className="w-full max-w-[220px]" aria-label="Untouched approval rate">
-      <path d="M 14 76 A 56 56 0 0 1 126 76" fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth="1.5" />
-      <path
-        d="M 14 76 A 56 56 0 0 1 126 76"
-        fill="none"
-        stroke="#A61B1C"
-        strokeWidth="1.5"
-        strokeDasharray={`${C * frac} ${C}`}
-        style={{ transition: "stroke-dasharray 0.6s ease" }}
-      />
-      {/* tick marks */}
-      {[0, 0.25, 0.5, 0.75, 1].map((t) => {
-        const a = Math.PI * (1 - t);
-        const x1 = 70 + Math.cos(a) * 60;
-        const y1 = 76 - Math.sin(a) * 60;
-        const x2 = 70 + Math.cos(a) * 64;
-        const y2 = 76 - Math.sin(a) * 64;
-        return <line key={t} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(255,255,255,0.18)" strokeWidth="1" />;
-      })}
-      <text x="70" y="66" textAnchor="middle" className="fill-ink" style={{ font: "600 24px var(--font-plex-mono)" }}>
-        {pct(value)}
-      </text>
-      <text x="70" y="80" textAnchor="middle" className="fill-ink-dim" style={{ font: "10px var(--font-plex-mono)", letterSpacing: "0.12em" }}>
-        UNTOUCHED
-      </text>
-    </svg>
+    <div className="relative flex h-[150px] w-full items-center justify-center" aria-label="Untouched approval rate">
+      <div style={{ transform: "perspective(420px) rotateX(58deg)" }}>
+        <svg width="230" height="230" viewBox="0 0 230 230" className="overflow-visible">
+          <defs>
+            <filter id="gaugeGlow" x="-40%" y="-40%" width="180%" height="180%">
+              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+          {/* outer tick ring */}
+          {ticks.map((a, i) => (
+            <line
+              key={i}
+              x1={115 + Math.cos(a) * 100}
+              y1={115 + Math.sin(a) * 100}
+              x2={115 + Math.cos(a) * (i % 4 === 0 ? 92 : 96)}
+              y2={115 + Math.sin(a) * (i % 4 === 0 ? 92 : 96)}
+              stroke={`rgba(232,232,227,${i % 4 === 0 ? 0.3 : 0.12})`}
+              strokeWidth="1"
+            />
+          ))}
+          {/* base ring */}
+          <circle cx="115" cy="115" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="6" />
+          {/* progress arc, glowing */}
+          <circle
+            cx="115"
+            cy="115"
+            r={R}
+            fill="none"
+            stroke="#A61B1C"
+            strokeWidth="3.5"
+            strokeLinecap="round"
+            strokeDasharray={`${C * frac} ${C}`}
+            transform="rotate(-90 115 115)"
+            filter="url(#gaugeGlow)"
+            style={{ transition: "stroke-dasharray 0.8s ease" }}
+          />
+          {/* progress head marker */}
+          {value != null && (
+            <circle
+              cx={115 + Math.cos(Math.PI * 2 * frac - Math.PI / 2) * R}
+              cy={115 + Math.sin(Math.PI * 2 * frac - Math.PI / 2) * R}
+              r="4"
+              fill="#A61B1C"
+              filter="url(#gaugeGlow)"
+            />
+          )}
+          {/* rotating inner dial */}
+          <g className="motion-safe:animate-[spin_28s_linear_infinite]" style={{ transformOrigin: "115px 115px" }}>
+            <circle cx="115" cy="115" r="62" fill="none" stroke="rgba(232,232,227,0.14)" strokeWidth="1" strokeDasharray="3 9" />
+            <circle cx="115" cy="115" r="50" fill="none" stroke="rgba(166,27,28,0.25)" strokeWidth="1" strokeDasharray="30 190" />
+          </g>
+          <circle cx="115" cy="115" r="36" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="10" />
+        </svg>
+      </div>
+      {/* upright readout floating above the tilted plane */}
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+        <span className="font-mono text-3xl font-semibold text-ink drop-shadow-[0_0_10px_rgba(166,27,28,0.35)]">
+          {pct(value)}
+        </span>
+        <span className="font-mono text-[9px] tracking-[0.3em] text-ink-dim">UNTOUCHED · {windowDays}D</span>
+      </div>
+    </div>
   );
 }
 
@@ -95,7 +140,7 @@ export function KpiPanel({ index }: { index: number }) {
       {data && (
         <>
           <div className="mt-3 flex justify-center">
-            <ArcGauge value={data.overall.untouchedApprovalRate} />
+            <Gauge3D value={data.overall.untouchedApprovalRate} windowDays={windowDays} />
           </div>
           <div className="mt-1">
             <Sparkline values={data.dailyApprovals} />

@@ -48,10 +48,21 @@ export async function approveItem(pageId: string) {
   const original = readRichTextProp(page, "Original Draft");
   const body = await readItemBody(page, p);
 
-  await updatePage(pageId, {
-    ...(await buildStatusUpdate(dsId, "Approved")),
-    "Approved At": { date: { start: new Date().toISOString() } },
-  });
+  try {
+    await updatePage(pageId, {
+      ...(await buildStatusUpdate(dsId, "Approved")),
+      "Approved At": { date: { start: new Date().toISOString() } },
+    });
+  } catch (err) {
+    // Pre-migration DBs lack "Approved At" — approve on status alone rather
+    // than blocking the flow. Run `npm run migrate` to get full tracking.
+    if (err instanceof Error && /Approved At|property that does not exist|not a property/i.test(err.message)) {
+      console.warn("Approved At missing (run npm run migrate) — approving with status only");
+      await updatePage(pageId, await buildStatusUpdate(dsId, "Approved"));
+    } else {
+      throw err;
+    }
+  }
 
   await logEvent({
     event: edited ? "Approved-with-edits" : "Approved",
