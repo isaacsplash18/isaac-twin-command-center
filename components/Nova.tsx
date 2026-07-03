@@ -28,11 +28,13 @@ interface Pt {
   x: number;
   y: number;
   z: number;
-  /** brightness multiplier: features are brighter than the skull shell */
+  /** unit surface normal (for facing-the-camera shading) */
+  nx: number;
+  nz: number;
+  /** brightness multiplier */
   b: number;
-  /** feature class for runtime effects */
-  kind: "shell" | "feature" | "pupil" | "mouth";
-  /** mouth points remember their x-fraction for the curve */
+  kind: "shell" | "pupil" | "mouth";
+  /** lips remember their angular offset for the mood curve */
   mx?: number;
 }
 
@@ -44,78 +46,112 @@ function lcg(seed: number) {
   };
 }
 
-const SOCKETS = [
-  { x: -8.5, y: -16, z: 20 },
-  { x: 8.5, y: -16, z: 20 },
-];
+const gauss = (v: number, mu: number, sigma: number) => Math.exp(-((v - mu) ** 2) / (2 * sigma * sigma));
 
+/**
+ * Parametric bust, sampled as horizontal contour rings (3D-scanner look).
+ * The face is surface relief, not decoration: the nose, lips, brow and chin
+ * displace the rings outward; the eye sockets indent them. Dots are spaced
+ * evenly by arc length so the cloud reads as a coherent scan, not noise.
+ *
+ * Model space: y down, head centred on x=0, front = +z (θ=0).
+ */
 function buildNova(): Pt[] {
   const rnd = lcg(7);
   const pts: Pt[] = [];
-  const nearSocket = (p: { x: number; y: number; z: number }) =>
-    SOCKETS.some((s) => Math.hypot(p.x - s.x, p.y - s.y, p.z - s.z) < 5.2);
 
-  const onEllipsoid = (
-    n: number,
-    cx: number, cy: number, cz: number,
-    rx: number, ry: number, rz: number,
-    keep: (p: { x: number; y: number; z: number }) => boolean,
-    b = 1, kind: Pt["kind"] = "shell"
-  ) => {
-    for (let i = 0; i < n * 4 && n > 0; i++) {
-      const th = rnd() * Math.PI * 2;
-      const ph = Math.acos(2 * rnd() - 1);
-      const p = {
-        x: cx + rx * Math.sin(ph) * Math.cos(th),
-        y: cy + ry * Math.cos(ph),
-        z: cz + rz * Math.sin(ph) * Math.sin(th),
-      };
-      if (keep(p)) {
-        pts.push({ ...p, b, kind });
-        n--;
-      }
+  // --- lathe profile: base radii per y ---
+  const profile = (y: number): { rx: number; rz: number } | null => {
+    if (y < -35 || y > 53) return null;
+    let r: number;
+    if (y <= -12) {
+      // cranium: hemisphere-ish
+      const t = (y + 12) / 23.5;
+      r = 22 * Math.sqrt(Math.max(0, 1 - t * t));
+    } else if (y <= 19) {
+      // face: taper toward the chin
+      const t = (y + 12) / 31;
+      r = 22 * (1 - 0.58 * Math.pow(t, 1.6));
+    } else {
+      r = 9.2;
     }
+    // neck: blend the jaw into a column, then flare into shoulders/trapezius
+    if (y > 14 && y <= 34) {
+      const t = Math.min(1, (y - 14) / 7);
+      r = r * (1 - t) + 8.8 * t;
+    } else if (y > 34) {
+      const t = (y - 34) / 19;
+      const shoulder = 9 + Math.pow(t, 1.35) * 33;
+      return { rx: shoulder, rz: 11 + t * 3 };
+    }
+    // heads are deeper than they are wide
+    return { rx: r * 0.94, rz: r * 1.06 };
   };
 
-  // Skull + jaw + neck + shoulders (sockets carved out of the skull)
-  onEllipsoid(950, 0, -12, 0, 23, 29, 25, (p) => !nearSocket(p));
-  onEllipsoid(300, 0, 8, 5, 15, 15, 15, (p) => p.y > 6 && !nearSocket(p));
-  for (let i = 0; i < 160; i++) {
-    const a = rnd() * Math.PI * 2;
-    pts.push({ x: Math.cos(a) * 9, y: 22 + rnd() * 16, z: Math.sin(a) * 9, b: 1, kind: "shell" });
-  }
-  onEllipsoid(400, 0, 50, 0, 38, 13, 15, (p) => p.y < 50);
+  // --- facial relief added to the radius at front angles (θ=0 is the nose line) ---
+  const relief = (theta: number, y: number): number => {
+    const t = Math.abs(theta);
+    let d = 0;
+    // brow ridge
+    d += 1.7 * gauss(y, -18.5, 2.4) * gauss(t, 0.32, 0.28);
+    // eye sockets (indent)
+    d -= 2.6 * gauss(y, -13.5, 2.4) * (gauss(theta, 0.36, 0.16) + gauss(theta, -0.36, 0.16));
+    // nose bridge → tip
+    d += 6.2 * gauss(theta, 0, 0.13) * gauss(y, -2, 5.2);
+    // under-nose cut
+    d -= 2.6 * gauss(theta, 0, 0.18) * gauss(y, 4.5, 1.6);
+    // lips (double ridge) + mouth line shadow
+    d += 1.8 * gauss(theta, 0, 0.26) * (gauss(y, 8.4, 1.1) + gauss(y, 11.6, 1.2));
+    d -= 1.4 * gauss(theta, 0, 0.24) * gauss(y, 10, 0.7);
+    // chin + cheekbones
+    d += 1.4 * gauss(theta, 0, 0.27) * gauss(y, 16, 2.2);
+    d += 1.5 * gauss(y, -6, 3.2) * gauss(t, 0.62, 0.18);
+    return d;
+  };
 
-  // Brows: two bright arcs above the sockets
+  const isLip = (theta: number, y: number) => Math.abs(theta) < 0.42 && y > 7 && y < 13;
+
+  // --- contour rings, arc-length-even sampling ---
+  for (let y = -35; y <= 53; y += 1.55) {
+    const base = profile(y);
+    if (!base || base.rx < 0.8) continue;
+    const circumference = Math.PI * (base.rx + base.rz);
+    const steps = Math.max(10, Math.floor(circumference / 2.1));
+    for (let i = 0; i < steps; i++) {
+      const theta = (i / steps) * Math.PI * 2 - Math.PI + rnd() * 0.06;
+      const d = y < 20 ? relief(theta, y) : 0;
+      const rx = base.rx + d;
+      const rz = base.rz + d;
+      const jy = y + (rnd() - 0.5) * 0.5;
+      const x = Math.sin(theta) * rx;
+      const z = Math.cos(theta) * rz;
+      // normal ≈ radial direction (good enough for shading)
+      const nl = Math.hypot(x / (rx * rx), z / (rz * rz)) || 1;
+      pts.push({
+        x,
+        y: jy,
+        z,
+        nx: x / (rx * rx) / nl,
+        nz: z / (rz * rz) / nl,
+        b: 1,
+        kind: isLip(theta, y) ? "mouth" : "shell",
+        mx: isLip(theta, y) ? theta / 0.42 : undefined,
+      });
+    }
+  }
+
+  // --- pupils: one oxblood ember deep in each socket ---
   for (const side of [-1, 1]) {
-    for (let i = 0; i <= 8; i++) {
-      const t = i / 8;
-      pts.push({ x: side * (4 + t * 9), y: -21.5 - Math.sin(t * Math.PI) * 1.6, z: 20.5 + Math.sin(t * Math.PI) * 1.2, b: 2.1, kind: "feature" });
-    }
-  }
-  // Socket rims + irises + pupils
-  for (const s of SOCKETS) {
-    for (let i = 0; i < 14; i++) {
-      const a = (i / 14) * Math.PI * 2;
-      pts.push({ x: s.x + Math.cos(a) * 4.2, y: s.y + Math.sin(a) * 3.2, z: s.z + 0.5, b: 1.7, kind: "feature" });
-    }
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2;
-      pts.push({ x: s.x + Math.cos(a) * 1.6, y: s.y + Math.sin(a) * 1.4, z: s.z + 1.6, b: 2.2, kind: "feature" });
-    }
-    pts.push({ x: s.x, y: s.y, z: s.z + 2.2, b: 3, kind: "pupil" });
-  }
-  // Nose: bridge + tip + nostril flares
-  for (let i = 0; i <= 8; i++) {
-    const t = i / 8;
-    pts.push({ x: 0, y: -14 + t * 16, z: 23.5 + Math.sin(t * Math.PI * 0.6) * 3.5, b: 1.8, kind: "feature" });
-  }
-  pts.push({ x: -3, y: 3.5, z: 23.5, b: 1.8, kind: "feature" });
-  pts.push({ x: 3, y: 3.5, z: 23.5, b: 1.8, kind: "feature" });
-  // Mouth: 15 points, curve applied at draw time from mood
-  for (let i = 0; i <= 14; i++) {
-    const mx = i / 14 - 0.5; // -0.5..0.5
-    pts.push({ x: mx * 15, y: 12, z: 21.5, b: 2, kind: "mouth", mx });
+    const theta = side * 0.36;
+    pts.push({
+      x: Math.sin(theta) * 19.5,
+      y: -13.5,
+      z: Math.cos(theta) * 21.5,
+      nx: 0,
+      nz: 1,
+      b: 3,
+      kind: "pupil",
+    });
   }
   return pts;
 }
@@ -220,9 +256,9 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
       const cosP = Math.cos(pitch), sinP = Math.sin(pitch);
 
       for (const p of cloud) {
-        // mood-curved mouth
+        // mood-curved lips (mx ∈ [-1,1] across the mouth)
         let my = p.y;
-        if (p.kind === "mouth" && p.mx !== undefined) my = p.y + mouthCurve * (p.mx * 2) * (p.mx * 2);
+        if (p.kind === "mouth" && p.mx !== undefined) my = p.y + mouthCurve * p.mx * p.mx;
 
         // rotate: yaw (Y) then pitch (X)
         const x1 = p.x * cosY - p.z * sinY;
@@ -233,12 +269,16 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
         const f = 200 / (200 + z2);
         let px = cx + x1 * f * scale;
         let py = cy + y2 * f * scale;
-        const depth = Math.max(0, Math.min(1, (z2 + 45) / 90));
+        const depth = Math.max(0, Math.min(1, (45 - z2) / 90));
+
+        // facing-the-camera shading from the rotated surface normal
+        const nz2 = p.nx * sinY + p.nz * cosY;
+        const facing = Math.max(0, -nz2);
 
         let rgb = p.kind === "pupil" ? OXBRIGHT : INK;
-        let alpha = (0.08 + depth * 0.4) * Math.min(p.b, 1.6);
-        if (p.b > 1.5) alpha = Math.min(1, 0.25 + depth * 0.6);
-        let r = (0.6 + depth * 0.9) * (p.b > 1.5 ? 1.25 : 1) * (scale / 3.3);
+        let alpha = 0.05 + depth * 0.22 + facing * 0.33;
+        if (p.kind === "pupil") alpha = 0.95;
+        let r = (0.55 + depth * 0.55 + facing * 0.35) * (p.kind === "pupil" ? 1.9 : 1) * (scale / 3.4);
 
         // scan shimmer
         if (Math.abs(p.y - scanY) < 3) alpha = Math.min(1, alpha + 0.3);
@@ -281,10 +321,15 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
       grad.addColorStop(1, `rgba(${OXBRIGHT},0)`);
       ctx.fillStyle = grad;
       ctx.fillRect(cx - w, Math.min(baseY, size - 2), w * 2, 1.5);
-
-      if (!reduced) raf = requestAnimationFrame(draw);
     };
-    raf = requestAnimationFrame(draw);
+
+    // First frame synchronously (no blank canvas on load), then the loop
+    draw(performance.now());
+    const loop = (t: number) => {
+      draw(t);
+      raf = requestAnimationFrame(loop);
+    };
+    if (!reduced) raf = requestAnimationFrame(loop);
 
     return () => {
       cancelAnimationFrame(raf);
