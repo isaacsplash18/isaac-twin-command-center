@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApprovalQueue } from "./ApprovalQueue";
 import { BootSequence } from "./BootSequence";
+import { CalibrationPanel } from "./CalibrationPanel";
 import { CommandPalette, PaletteAction } from "./CommandPalette";
 import { KpiPanel } from "./KpiPanel";
 import { Nova } from "./Nova";
@@ -202,6 +203,11 @@ export function CommandCenter() {
         {/* NOVA — the twin, centre stage */}
         <section aria-label="Nova" className="mb-6 flex justify-center">
           <Nova mood={nova.mood} line={nova.lines[novaIdx % nova.lines.length]} />
+        </section>
+
+        {/* Weekly calibration — the loop that keeps the Constitution alive */}
+        <section aria-label="Weekly calibration" className="mb-6">
+          <CalibrationPanel onToast={toast} />
         </section>
 
         <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
