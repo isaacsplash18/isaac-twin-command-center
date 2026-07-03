@@ -3,62 +3,82 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
- * Signature element #2 (PRD §5.3): the app's "face" — a dot-matrix robot
- * face on a 2D canvas, behavior model lifted from the Cozmo/Vector
- * "RoboEyes" pattern (FluxGarage/RoboEyes, playfultechnology/esp32-eyes),
- * re-implemented dependency-free:
+ * Signature element #2 (PRD §5.3): the app's "face" — a holographic
+ * point-cloud head, Cortana-style (scan-line shimmer, hologram glitches),
+ * rendered in the app's oxblood/ink palette on a plain 2D canvas.
  *
- *  - idle: procedural blinks every 2.5–6s, occasional gaze saccades,
- *    slowly rotating dot halo
- *  - approve (twin-pulse "approve"): eyes squash into happy arcs +
- *    an oxblood sweep travels across the matrix
- *  - failure (twin-pulse "error"): eyes flash red, jitter, flat lids
+ * Technique per the hologram-shader / particle-morph references
+ * (threejs-journey hologram lesson, mmdalipour/particle-morph), re-built
+ * without three.js: a pre-baked 3D point cloud of a bust, rotated and
+ * perspective-projected per frame. ~1,400 dots, zero dependencies.
  *
- * Degrades to a static SVG face on mobile / prefers-reduced-motion.
+ *  - idle: slow ±35° head turn, a scan band sweeping down, occasional
+ *    slice glitch
+ *  - approve (twin-pulse "approve"): an oxblood pulse travels feet→crown
+ *  - failure (twin-pulse "error"): heavy red slice-glitch flicker
+ *
+ * Degrades to a static SVG projection on mobile / prefers-reduced-motion.
  */
-
-// Face layout on a 16x12 cell grid
-const COLS = 16;
-const ROWS = 12;
-const EYE_W = 4;
-const EYE_H = 5;
-const LEFT_EYE_X = 2;
-const RIGHT_EYE_X = 10;
-const EYE_Y = 3;
 
 const INK = "232,232,227";
 const OXBRIGHT = "166,27,28";
 
-interface FaceState {
-  openness: number; // 1 open … 0 shut
-  gazeX: number; // cell offset -1..1
-  gazeY: number;
-  mood: "neutral" | "happy" | "error";
-  nextBlinkAt: number;
-  blinkPhase: number; // 0 none, else timestamp blink started
-  nextSaccadeAt: number;
-  moodUntil: number;
-  sweepStart: number; // approve sweep start ts, -1 = off
+interface Pt {
+  x: number;
+  y: number;
+  z: number;
 }
 
-/** Which cells of one eye are lit, given the current state. */
-function eyeCell(row: number, col: number, s: FaceState): boolean {
-  // Blink: keep the middle rows as openness drops
-  const visibleRows = Math.max(1, Math.round(EYE_H * s.openness));
-  const top = Math.floor((EYE_H - visibleRows) / 2);
-  if (row < top || row >= top + visibleRows) return false;
+// Deterministic PRNG so SSR and client render the identical static cloud.
+function lcg(seed: number) {
+  let s = seed;
+  return () => {
+    s = (s * 1664525 + 1013904223) % 4294967296;
+    return s / 4294967296;
+  };
+}
 
-  if (s.mood === "happy") {
-    // Happy arc (∩): top rows full, lower rows only the outer columns
-    if (row >= 3) return false;
-    if (row === 2) return col === 0 || col === EYE_W - 1;
-    return true;
+/** Procedural bust: skull, jaw, neck, shoulders as sampled surfaces. Model space: y down, origin mid-head. */
+function buildBust(): Pt[] {
+  const rnd = lcg(42);
+  const pts: Pt[] = [];
+  const onEllipsoid = (n: number, cx: number, cy: number, cz: number, rx: number, ry: number, rz: number, keep: (p: Pt) => boolean) => {
+    for (let i = 0; i < n * 3 && pts.length < 4000; i++) {
+      const theta = rnd() * Math.PI * 2;
+      const phi = Math.acos(2 * rnd() - 1);
+      const p = {
+        x: cx + rx * Math.sin(phi) * Math.cos(theta),
+        y: cy + ry * Math.cos(phi),
+        z: cz + rz * Math.sin(phi) * Math.sin(theta),
+      };
+      if (keep(p)) {
+        pts.push(p);
+        if (--n <= 0) return;
+      }
+    }
+  };
+  onEllipsoid(650, 0, -12, 0, 23, 29, 25, () => true); // skull
+  onEllipsoid(220, 0, 8, 5, 15, 15, 15, (p) => p.y > 6); // jaw/chin
+  // neck: cylinder
+  for (let i = 0; i < 130; i++) {
+    const a = rnd() * Math.PI * 2;
+    pts.push({ x: Math.cos(a) * 9, y: 22 + rnd() * 16, z: Math.sin(a) * 9 });
   }
-  if (s.mood === "error") {
-    // Flat angry lids: drop the top row
-    return row > 0;
-  }
-  return true;
+  onEllipsoid(320, 0, 50, 0, 38, 13, 15, (p) => p.y < 50); // shoulders
+  return pts;
+}
+
+const BUST = buildBust();
+const MODEL_TOP = -42;
+const MODEL_BOTTOM = 52;
+
+function project(p: Pt, angle: number, scale: number, cx: number, cy: number) {
+  const cosA = Math.cos(angle);
+  const sinA = Math.sin(angle);
+  const x = p.x * cosA - p.z * sinA;
+  const z = p.x * sinA + p.z * cosA;
+  const f = 130 / (130 + z); // perspective
+  return { px: cx + x * f * scale, py: cy + p.y * f * scale, depth: (z + 40) / 80 };
 }
 
 export function TwinCore({ size = 88 }: { size?: number }) {
@@ -83,118 +103,80 @@ export function TwinCore({ size = 88 }: { size?: number }) {
     canvas.height = size * dpr;
     ctx.scale(dpr, dpr);
 
-    const cell = size / (COLS + 2);
-    const originX = cell * 1.5;
-    const originY = cell * 2;
-    const dotR = cell * 0.32;
+    const scale = size / 115;
+    const cx = size / 2;
+    const cy = size / 2 - 4;
 
-    const now = performance.now();
-    const s: FaceState = {
-      openness: 1,
-      gazeX: 0,
-      gazeY: 0,
-      mood: "neutral",
-      nextBlinkAt: now + 1500,
-      blinkPhase: 0,
-      nextSaccadeAt: now + 2200,
-      moodUntil: 0,
-      sweepStart: -1,
-    };
-    let jitterUntil = 0;
+    let approveStart = -1;
+    let errorUntil = -1;
+    let glitchAt = performance.now() + 3000;
+    let glitchY = 0;
     let raf = 0;
 
     const onPulse = (e: Event) => {
       const kind = (e as CustomEvent).detail;
       const t = performance.now();
-      if (kind === "approve") {
-        s.mood = "happy";
-        s.moodUntil = t + 1100;
-        s.sweepStart = t;
-      } else if (kind === "error") {
-        s.mood = "error";
-        s.moodUntil = t + 900;
-        jitterUntil = t + 500;
-      }
+      if (kind === "approve") approveStart = t;
+      else if (kind === "error") errorUntil = t + 750;
     };
     window.addEventListener("twin-pulse", onPulse);
 
-    const dot = (cx: number, cy: number, rgb: string, alpha: number, r = dotR) => {
-      ctx.fillStyle = `rgba(${rgb},${alpha})`;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fill();
-    };
-
     const draw = (t: number) => {
-      // --- behavior model (RoboEyes-style) ---
-      if (s.mood !== "neutral" && t > s.moodUntil) s.mood = "neutral";
-      if (s.mood === "neutral") {
-        if (!s.blinkPhase && t >= s.nextBlinkAt) s.blinkPhase = t;
-        if (s.blinkPhase) {
-          const p = (t - s.blinkPhase) / 140; // 140ms blink
-          s.openness = p < 0.5 ? 1 - p * 2 : (p - 0.5) * 2;
-          if (p >= 1) {
-            s.blinkPhase = 0;
-            s.openness = 1;
-            s.nextBlinkAt = t + 2500 + Math.random() * 3500;
-          }
-        }
-        if (t >= s.nextSaccadeAt) {
-          s.gazeX = Math.round(Math.random() * 2 - 1);
-          s.gazeY = Math.random() < 0.3 ? 1 : 0;
-          s.nextSaccadeAt = t + 1200 + Math.random() * 3000;
-        }
-      } else {
-        s.openness = 1;
-        s.gazeX = 0;
-        s.gazeY = 0;
-      }
-
-      const jx = t < jitterUntil ? (Math.random() - 0.5) * 2 : 0;
-      const jy = t < jitterUntil ? (Math.random() - 0.5) * 2 : 0;
-      const rgb = s.mood === "error" ? OXBRIGHT : INK;
-
       ctx.clearRect(0, 0, size, size);
 
-      // --- halo: slowly rotating ring of faint dots ---
-      const cx0 = size / 2;
-      const cy0 = size / 2;
-      const haloR = size / 2 - dotR * 2;
-      for (let i = 0; i < 28; i++) {
-        const a = (i / 28) * Math.PI * 2 + t * 0.00012;
-        dot(cx0 + Math.cos(a) * haloR, cy0 + Math.sin(a) * haloR, INK, 0.1 + 0.08 * Math.sin(a * 3 + t * 0.001), dotR * 0.6);
+      const angle = 0.62 * Math.sin(t * 0.00028); // slow ±35° head turn
+      // Scan band sweeping top → bottom on a 2.8s cycle (model-space y)
+      const scanY = MODEL_TOP + ((t % 2800) / 2800) * (MODEL_BOTTOM - MODEL_TOP);
+      // Idle slice glitch every 3–7s for 160ms
+      const inGlitch = t > glitchAt && t < glitchAt + 160;
+      if (t > glitchAt + 160) {
+        glitchAt = t + 3000 + Math.random() * 4000;
+        glitchY = MODEL_TOP + Math.random() * (MODEL_BOTTOM - MODEL_TOP);
       }
+      const hardError = t < errorUntil;
+      // Approve pulse: a band travelling bottom → top over 650ms
+      const approveP = approveStart >= 0 ? (t - approveStart) / 650 : -1;
+      if (approveP > 1.15) approveStart = -1;
+      const approveY = approveP >= 0 ? MODEL_BOTTOM - approveP * (MODEL_BOTTOM - MODEL_TOP) : -999;
 
-      // --- approve sweep: an oxblood column travelling left → right ---
-      const sweepCol = s.sweepStart >= 0 ? ((t - s.sweepStart) / 550) * (COLS + 4) - 2 : -99;
-      if (s.sweepStart >= 0 && t - s.sweepStart > 700) s.sweepStart = -1;
+      for (const p of BUST) {
+        const { px, py, depth } = project(p, angle, scale, cx, cy);
+        let x = px;
+        let rgb = INK;
+        let alpha = 0.10 + depth * 0.42;
+        let r = 0.5 + depth * 0.65;
 
-      // --- eyes ---
-      for (const eyeX of [LEFT_EYE_X, RIGHT_EYE_X]) {
-        for (let r = 0; r < EYE_H; r++) {
-          for (let c = 0; c < EYE_W; c++) {
-            if (!eyeCell(r, c, s)) continue;
-            const gc = eyeX + c + s.gazeX;
-            const gr = EYE_Y + r + s.gazeY;
-            const px = originX + gc * cell + jx;
-            const py = originY + gr * cell + jy;
-            const nearSweep = Math.abs(gc - sweepCol) < 1.2;
-            dot(px, py, nearSweep ? OXBRIGHT : rgb, nearSweep ? 0.95 : 0.85);
-          }
+        // scan shimmer
+        if (Math.abs(p.y - scanY) < 3.5) {
+          alpha = Math.min(1, alpha + 0.35);
+          r += 0.2;
         }
+        // idle glitch slice: shear a horizontal band, tint oxblood
+        if ((inGlitch || hardError) && Math.abs(p.y - (hardError ? ((t / 60) % 90) - 45 : glitchY)) < (hardError ? 14 : 5)) {
+          x += hardError ? (Math.random() - 0.5) * 6 : 3;
+          rgb = OXBRIGHT;
+          alpha = Math.min(1, alpha + 0.4);
+        }
+        if (hardError && Math.random() < 0.08) rgb = OXBRIGHT;
+        // approve pulse band
+        if (Math.abs(p.y - approveY) < 6) {
+          rgb = OXBRIGHT;
+          alpha = Math.min(1, alpha + 0.55);
+          r += 0.4;
+        }
+
+        ctx.fillStyle = `rgba(${rgb},${alpha})`;
+        ctx.fillRect(x - r / 2, py - r / 2, r, r);
       }
 
-      // --- mouth: single quiet dot row, widens into a smile on happy ---
-      const mouthRow = EYE_Y + EYE_H + 2;
-      const mouthCols =
-        s.mood === "happy" ? [5, 6, 7, 8, 9, 10] : s.mood === "error" ? [6, 7, 8, 9] : [7, 8];
-      for (const c of mouthCols) {
-        const lift = s.mood === "happy" && (c === 5 || c === 10) ? -1 : 0;
-        const px = originX + c * cell + jx;
-        const py = originY + (mouthRow + lift) * cell + jy;
-        const nearSweep = Math.abs(c - sweepCol) < 1.2;
-        dot(px, py, nearSweep ? OXBRIGHT : rgb, nearSweep ? 0.95 : 0.5);
-      }
+      // hologram base: faint emitter line + glow under the bust
+      const baseY = cy + MODEL_BOTTOM * scale + 2;
+      const grad = ctx.createLinearGradient(cx - 26, baseY, cx + 26, baseY);
+      grad.addColorStop(0, `rgba(${OXBRIGHT},0)`);
+      grad.addColorStop(0.5, `rgba(${OXBRIGHT},${hardError ? 0.9 : 0.45})`);
+      grad.addColorStop(1, `rgba(${OXBRIGHT},0)`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(cx - 26, baseY, 52, 1);
 
       raf = requestAnimationFrame(draw);
     };
@@ -206,28 +188,15 @@ export function TwinCore({ size = 88 }: { size?: number }) {
   }, [staticMode, size]);
 
   if (staticMode) {
-    // Static dot-matrix face — same layout, zero cost.
-    const cell = 88 / (COLS + 2);
-    const ox = cell * 1.5;
-    const oy = cell * 2;
-    const eyes: { x: number; y: number }[] = [];
-    for (const eyeX of [LEFT_EYE_X, RIGHT_EYE_X])
-      for (let r = 0; r < EYE_H; r++)
-        for (let c = 0; c < EYE_W; c++) eyes.push({ x: ox + (eyeX + c) * cell, y: oy + (EYE_Y + r) * cell });
+    // Static front projection of the same cloud — deterministic, zero cost.
+    const scale = 88 / 115;
+    const dots = BUST.filter((_, i) => i % 2 === 0).map((p) => project(p, 0.3, scale, 44, 40));
     return (
       <svg width={size} height={size} viewBox="0 0 88 88" aria-hidden className="shrink-0">
-        {Array.from({ length: 28 }, (_, i) => {
-          const a = (i / 28) * Math.PI * 2;
-          return (
-            <circle key={`h${i}`} cx={44 + Math.cos(a) * 40} cy={44 + Math.sin(a) * 40} r={cell * 0.2} fill="#E8E8E3" opacity="0.14" />
-          );
-        })}
-        {eyes.map((d, i) => (
-          <circle key={i} cx={d.x} cy={d.y} r={cell * 0.32} fill="#E8E8E3" opacity="0.85" />
+        {dots.map((d, i) => (
+          <circle key={i} cx={d.px} cy={d.py} r={0.35 + d.depth * 0.45} fill="#E8E8E3" opacity={0.1 + d.depth * 0.4} />
         ))}
-        {[7, 8].map((c) => (
-          <circle key={`m${c}`} cx={ox + c * cell} cy={oy + (EYE_Y + EYE_H + 2) * cell} r={cell * 0.32} fill="#E8E8E3" opacity="0.5" />
-        ))}
+        <rect x="20" y="83" width="48" height="1" fill="#A61B1C" opacity="0.4" />
       </svg>
     );
   }

@@ -20,13 +20,24 @@ export async function GET() {
     const queued: ContentItem[] = [];
     const posted: ContentItem[] = [];
 
+    const errors: string[] = [];
+    // Each lane degrades independently: pre-migration DBs lack the Queued/
+    // Rejected options and Notion 400s on filters for unknown select options.
+    const lane = (p: (typeof PLATFORMS)[number], status: string, opts: Parameters<typeof itemsWithStatus>[2]) =>
+      itemsWithStatus(p, status, opts).catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        // Missing select option = schema not migrated yet; not a failure.
+        if (!message.includes("not found for property")) errors.push(`${p.label}/${status}: ${message}`);
+        return [];
+      });
+
     await Promise.all(
       PLATFORMS.map(async (p) => {
         const [d, a, q, po] = await Promise.all([
-          itemsWithStatus(p, "Draft", { withBody: true, limit: 20 }),
-          itemsWithStatus(p, "Approved", { withBody: p.autoPublish ? false : true, limit: 20 }),
-          itemsWithStatus(p, "Queued", { limit: 20 }),
-          itemsWithStatus(p, "Posted", { limit: 10 }),
+          lane(p, "Draft", { withBody: true, limit: 20 }),
+          lane(p, "Approved", { withBody: p.autoPublish ? false : true, limit: 20 }),
+          lane(p, "Queued", { limit: 20 }),
+          lane(p, "Posted", { limit: 10 }),
         ]);
         drafts.push(...d);
         (p.autoPublish ? approved : manual).push(...a);
@@ -49,6 +60,7 @@ export async function GET() {
       queued,
       posted: posted.slice(0, 10),
       fetchedAt: new Date().toISOString(),
+      ...(errors.length ? { warning: errors.join(" · ") } : {}),
     });
   } catch (err) {
     console.error("GET /api/queue failed:", err);
