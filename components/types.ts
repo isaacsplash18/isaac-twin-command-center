@@ -25,7 +25,9 @@ export interface QueueData {
   approved: ContentItem[];
   queued: ContentItem[];
   posted: ContentItem[];
+  rejected: ContentItem[];
   fetchedAt: string;
+  warning?: string;
 }
 
 export interface PlatformKpi {

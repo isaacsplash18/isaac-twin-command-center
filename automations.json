@@ -22,16 +22,6 @@
   {
     "name": "Sunday cleanup",
     "cadence": "Sun",
-    "purpose": "Deletes past-dated unposted X/LinkedIn drafts. Must skip Queued items — coordinate before enabling the publisher."
-  },
-  {
-    "name": "Command Center publisher",
-    "cadence": "07:00 & 17:00 SGT",
-    "purpose": "This app's Vercel cron: schedules Approved X/LinkedIn drafts into Typefully."
-  },
-  {
-    "name": "Command Center reconciler",
-    "cadence": "Hourly",
-    "purpose": "This app's Vercel cron: confirms Typefully publishes and writes Posted back to Notion."
+    "purpose": "Deletes past-dated unposted X/LinkedIn drafts. Must skip scheduled items — coordinate before enabling auto-publishing."
   }
 ]

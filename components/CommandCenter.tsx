@@ -54,7 +54,7 @@ export function CommandCenter() {
     for (const q of data.queued.slice(0, 4)) {
       lines.push(`${q.platformLabel} post queued — ${formatSgt(q.scheduledAt)}`);
     }
-    if (data.approved.length > 0) lines.push(`${data.approved.length} approved, awaiting publisher cron`);
+    if (data.approved.length > 0) lines.push(`${data.approved.length} approved, awaiting scheduler`);
     if (data.manual.length > 0) lines.push(`${data.manual.length} item${data.manual.length === 1 ? "" : "s"} ready to post — copy from the queue`);
     for (const p of data.posted.slice(0, 2)) lines.push(`Posted: ${p.title || p.platformLabel}`);
     if (failures.length > 0) lines.push(`⚠ ${failures.length} publish failure${failures.length === 1 ? "" : "s"} — check queue`);
@@ -102,7 +102,7 @@ export function CommandCenter() {
       acts.push({
         id: "publish-next",
         label: `Publish next slot — ${firstApproved.title || firstApproved.platformLabel}`,
-        hint: "TYPEFULLY",
+        hint: "SCHEDULE",
         run: async () => {
           const res = await postAction(`/api/items/${firstApproved.id}/publish-next`);
           if (res.ok) {
@@ -212,6 +212,7 @@ export function CommandCenter() {
             queued={data?.queued ?? []}
             posted={data?.posted ?? []}
             manual={data?.manual ?? []}
+            rejected={data?.rejected ?? []}
             index={1}
             onChanged={() => queue.refresh()}
             onError={toast}

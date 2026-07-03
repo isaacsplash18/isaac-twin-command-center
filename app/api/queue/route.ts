@@ -31,18 +31,22 @@ export async function GET() {
         return [];
       });
 
+    const rejected: ContentItem[] = [];
+
     await Promise.all(
       PLATFORMS.map(async (p) => {
-        const [d, a, q, po] = await Promise.all([
+        const [d, a, q, po, re] = await Promise.all([
           lane(p, "Draft", { withBody: true, limit: 20 }),
           lane(p, "Approved", { withBody: p.autoPublish ? false : true, limit: 20 }),
           lane(p, "Queued", { limit: 20 }),
           lane(p, "Posted", { limit: 10 }),
+          lane(p, "Rejected", { limit: 10 }),
         ]);
         drafts.push(...d);
         (p.autoPublish ? approved : manual).push(...a);
         queued.push(...q);
         posted.push(...po);
+        rejected.push(...re);
       })
     );
 
@@ -52,6 +56,7 @@ export async function GET() {
     approved.sort(byCreatedDesc);
     queued.sort((a, b) => (a.scheduledAt ?? "9999").localeCompare(b.scheduledAt ?? "9999"));
     posted.sort((a, b) => b.lastEditedTime.localeCompare(a.lastEditedTime));
+    rejected.sort((a, b) => b.lastEditedTime.localeCompare(a.lastEditedTime));
 
     return NextResponse.json({
       drafts,
@@ -59,6 +64,7 @@ export async function GET() {
       approved,
       queued,
       posted: posted.slice(0, 10),
+      rejected: rejected.slice(0, 10),
       fetchedAt: new Date().toISOString(),
       ...(errors.length ? { warning: errors.join(" · ") } : {}),
     });
