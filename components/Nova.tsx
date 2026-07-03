@@ -3,19 +3,21 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
- * NOVA — the twin's face, built from the Halo-4 Cortana reference frame
- * (public/nova-face.png) via image-based holography:
+ * NOVA — the twin's face: TRUE 3D geometry with a projected photographic
+ * face.
  *
- *   Each sampled pixel becomes a glowing point; its LUMINANCE sets both its
- *   brightness and its DEPTH (bright = closer). The result is a genuine 3D
- *   relief of the reference that parallaxes as she turns to follow your
- *   cursor. Her eyes are the brightest pixels, so they read as embers
- *   automatically. Scan-line shimmer, hologram slice glitches, an approve
- *   pulse (crown→base flash) and a failure glitch complete the effect.
+ *   The head is a parametric bust (contour rings with facial relief), so
+ *   rotation is real 3D from any angle. Onto that geometry we project the
+ *   generated portrait (public/nova-portrait.png — front-facing studio
+ *   portrait): each surface point samples the portrait's luminance at its
+ *   front-planar projection, so her features light the correct places on
+ *   the 3D form and stay attached as the head turns. The back of the head
+ *   falls off to a dim structural shell. Scan-line shimmer, hologram slice
+ *   glitches, approve pulse and failure glitch complete the effect.
  *
  *   Palette: ink dots with oxblood highlights (the app's scarcity accent).
- *   If the reference image fails to load, Nova falls back to the
- *   parametric contour-ring bust. Plain canvas 2D, no dependencies.
+ *   If the portrait fails to load, Nova renders the untextured bust.
+ *   Plain canvas 2D, no dependencies.
  */
 
 const INK = "232,232,227";
@@ -27,70 +29,17 @@ interface Pt {
   x: number;
   y: number;
   z: number;
-  /** brightness 0..1 (image mode: pixel luminance) */
+  /** portrait luminance at this point (0..1), 0 when untextured */
   b: number;
-  kind: "img" | "imgeye" | "shell" | "pupil";
-  nx?: number;
-  nz?: number;
+  /** texture weight: how front-facing this point is in model space */
+  tw: number;
+  kind: "shell" | "pupil";
+  nx: number;
+  nz: number;
 }
 
-// ---------------------------------------------------------------------------
-// Image-based cloud: luminance → depth relief
-// ---------------------------------------------------------------------------
-
-const MODEL_TOP = -40;
-const MODEL_BOTTOM = 44;
-
-function sampleImage(img: HTMLImageElement, step: number): Pt[] {
-  const off = document.createElement("canvas");
-  off.width = img.naturalWidth;
-  off.height = img.naturalHeight;
-  const octx = off.getContext("2d");
-  if (!octx) return [];
-  octx.drawImage(img, 0, 0);
-  const { data } = octx.getImageData(0, 0, off.width, off.height);
-
-  const pts: Pt[] = [];
-  for (let py = 0; py < off.height; py += step) {
-    for (let px = 0; px < off.width; px += step) {
-      const i = (py * off.width + px) * 4;
-      const lum = (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / 255;
-      if (lum < 0.11) continue;
-      const u = px / off.width;
-      const v = py / off.height;
-      // soft elliptical mask kills the background bokeh
-      const e = Math.hypot((u - 0.5) / 0.46, (v - 0.52) / 0.52);
-      if (e > 1.05) continue;
-      const fade = e > 0.82 ? Math.max(0, 1 - (e - 0.82) / 0.23) : 1;
-      if (fade <= 0.05) continue;
-      pts.push({
-        x: (u - 0.5) * 62,
-        y: (v - 0.5) * 82 + 2,
-        // bright pixels sit forward; masked edges recede
-        z: 12 - lum * 30 + Math.max(0, e - 0.7) * 26,
-        b: lum * fade,
-        kind: lum > 0.86 ? "imgeye" : "img",
-      });
-    }
-  }
-  return pts;
-}
-
-function loadImageCloud(step: number): Promise<Pt[]> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const pts = sampleImage(img, step);
-      pts.length > 500 ? resolve(pts) : reject(new Error("sample too sparse"));
-    };
-    img.onerror = () => reject(new Error("nova-face.png failed to load"));
-    img.src = "/nova-face.png";
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Fallback: parametric contour-ring bust (no image required)
-// ---------------------------------------------------------------------------
+const MODEL_TOP = -38;
+const MODEL_BOTTOM = 46;
 
 function lcg(seed: number) {
   let s = seed;
@@ -102,7 +51,8 @@ function lcg(seed: number) {
 
 const gauss = (v: number, mu: number, sigma: number) => Math.exp(-((v - mu) ** 2) / (2 * sigma * sigma));
 
-function buildFallbackBust(): Pt[] {
+/** Parametric bust: contour rings + facial relief. Front = +z. */
+function buildBust(dense: boolean): Pt[] {
   const rnd = lcg(7);
   const pts: Pt[] = [];
   const profile = (y: number): { rx: number; rz: number } | null => {
@@ -136,26 +86,97 @@ function buildFallbackBust(): Pt[] {
     d += 1.4 * gauss(theta, 0, 0.27) * gauss(y, 16, 2.2);
     return d;
   };
-  for (let y = -35; y <= 44; y += 1.55) {
+  const yStep = dense ? 1.15 : 1.7;
+  const arc = dense ? 1.6 : 2.3;
+  for (let y = -35; y <= 44; y += yStep) {
     const base = profile(y);
     if (!base || base.rx < 0.8) continue;
-    const steps = Math.max(10, Math.floor((Math.PI * (base.rx + base.rz)) / 2.1));
+    const steps = Math.max(10, Math.floor((Math.PI * (base.rx + base.rz)) / arc));
     for (let i = 0; i < steps; i++) {
-      const theta = (i / steps) * Math.PI * 2 - Math.PI + rnd() * 0.06;
+      const theta = (i / steps) * Math.PI * 2 - Math.PI + rnd() * 0.05;
       const d = y < 20 ? relief(theta, y) : 0;
       const rx = base.rx + d;
       const rz = base.rz + d;
       const x = Math.sin(theta) * rx;
       const z = Math.cos(theta) * rz;
       const nl = Math.hypot(x / (rx * rx), z / (rz * rz)) || 1;
-      pts.push({ x, y: y + (rnd() - 0.5) * 0.5, z, b: 1, kind: "shell", nx: x / (rx * rx) / nl, nz: z / (rz * rz) / nl });
+      pts.push({
+        x,
+        y: y + (rnd() - 0.5) * 0.4,
+        z,
+        b: 0,
+        tw: 0,
+        kind: "shell",
+        nx: x / (rx * rx) / nl,
+        nz: z / (rz * rz) / nl,
+      });
     }
   }
   for (const side of [-1, 1]) {
     const theta = side * 0.36;
-    pts.push({ x: Math.sin(theta) * 19.5, y: -13.5, z: Math.cos(theta) * 21.5, b: 3, kind: "pupil", nx: 0, nz: 1 });
+    pts.push({
+      x: Math.sin(theta) * 19.5,
+      y: -13.5,
+      z: Math.cos(theta) * 21.5,
+      b: 1,
+      tw: 0,
+      kind: "pupil",
+      nx: 0,
+      nz: 1,
+    });
   }
   return pts;
+}
+
+// ---------------------------------------------------------------------------
+// Portrait projection: front-planar mapping model space → portrait UV
+// (calibrated against public/nova-portrait.png: crown v≈0.06, chin v≈0.625,
+// head half-width ≈ 0.18 of image width)
+// ---------------------------------------------------------------------------
+
+function portraitUV(x: number, y: number): { u: number; v: number } {
+  let v: number;
+  if (y <= 19) v = 0.06 + (y + 35) * ((0.625 - 0.06) / 54);
+  else v = 0.625 + (y - 19) * ((0.96 - 0.625) / 25);
+  // width factor widens from head to shoulders
+  const f = y <= 19 ? 0.00857 : 0.00857 + Math.min(1, (y - 19) / 15) * (0.012 - 0.00857);
+  return { u: 0.5 + x * f, v };
+}
+
+function loadPortraitSampler(): Promise<(u: number, v: number) => number> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const off = document.createElement("canvas");
+      off.width = img.naturalWidth;
+      off.height = img.naturalHeight;
+      const octx = off.getContext("2d");
+      if (!octx) return reject(new Error("no 2d context"));
+      octx.drawImage(img, 0, 0);
+      const { data } = octx.getImageData(0, 0, off.width, off.height);
+      resolve((u: number, v: number) => {
+        if (u < 0 || u > 1 || v < 0 || v > 1) return 0;
+        const px = Math.min(off.width - 1, Math.max(0, Math.round(u * off.width)));
+        const py = Math.min(off.height - 1, Math.max(0, Math.round(v * off.height)));
+        const i = (py * off.width + px) * 4;
+        return (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / 255;
+      });
+    };
+    img.onerror = () => reject(new Error("nova-portrait.png failed to load"));
+    img.src = "/nova-portrait.png";
+  });
+}
+
+/** Bake portrait luminance onto front-facing bust points (in place). */
+function texturize(pts: Pt[], sample: (u: number, v: number) => number) {
+  for (const p of pts) {
+    if (p.kind !== "shell") continue;
+    const facing = Math.max(0, p.nz); // model-space front
+    if (facing < 0.08) continue;
+    const { u, v } = portraitUV(p.x, p.y);
+    p.b = sample(u, v);
+    p.tw = Math.pow(facing, 0.7);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -190,8 +211,7 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const coarse = window.matchMedia("(pointer: coarse)").matches;
-    let cloud: Pt[] = [];
-    let imageMode = false;
+    const cloud = buildBust(!coarse);
     let cancelled = false;
     let raf = 0;
 
@@ -208,11 +228,8 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
       const rect = canvas.getBoundingClientRect();
       const nx = (e.clientX - (rect.left + rect.width / 2)) / (rect.width / 2);
       const ny = (e.clientY - (rect.top + rect.height / 2)) / (rect.height / 2);
-      // image relief breaks past ~±14°, so the cap is tighter in image mode
-      const yawCap = imageMode ? 0.24 : 0.85;
-      const pitchCap = imageMode ? 0.12 : 0.4;
-      targetYaw = Math.max(-yawCap, Math.min(yawCap, nx * yawCap * 1.1));
-      targetPitch = Math.max(-pitchCap, Math.min(pitchCap, ny * pitchCap * 1.1));
+      targetYaw = Math.max(-0.85, Math.min(0.85, nx * 0.9));
+      targetPitch = Math.max(-0.35, Math.min(0.45, ny * 0.4));
       pointer =
         e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom
           ? { x: e.clientX - rect.left, y: e.clientY - rect.top }
@@ -236,7 +253,7 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
     const draw = (t: number) => {
       ctx.clearRect(0, 0, size, size);
 
-      const idleYaw = (imageMode ? 0.1 : 0.3) * Math.sin(t * 0.00022);
+      const idleYaw = 0.28 * Math.sin(t * 0.00022);
       yaw += ((targetYaw || idleYaw) - yaw) * 0.07;
       pitch += (targetPitch - pitch) * 0.07;
 
@@ -252,10 +269,7 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
       const approveY = approveP >= 0 ? MODEL_BOTTOM - approveP * (MODEL_BOTTOM - MODEL_TOP) : -999;
 
       const mood = moodRef.current;
-      // Mood is glow behavior in image mode: praise burns brighter,
-      // sass flickers like a projector losing patience.
-      const moodGlow =
-        mood === "praise" ? 1.18 : mood === "sass" ? 0.88 + 0.06 * Math.sin(t * 0.011) : 1;
+      const moodGlow = mood === "praise" ? 1.15 : mood === "sass" ? 0.88 + 0.06 * Math.sin(t * 0.011) : 1;
 
       const cosY = Math.cos(yaw), sinY = Math.sin(yaw);
       const cosP = Math.cos(pitch), sinP = Math.sin(pitch);
@@ -269,24 +283,25 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
         const f = 200 / (200 + z2);
         let px = cx + x1 * f * scale;
         let py = cy + y2 * f * scale;
+        const depth = Math.max(0, Math.min(1, (45 - z2) / 90));
 
-        let rgb: string;
+        // camera-facing shading from the rotated surface normal
+        const nz2 = p.nx * sinY + p.nz * cosY;
+        const facingCam = Math.max(0, -nz2);
+
+        let rgb = p.kind === "pupil" ? OXBRIGHT : INK;
         let alpha: number;
         let r: number;
-        if (p.kind === "img" || p.kind === "imgeye") {
-          rgb = p.kind === "imgeye" ? OXBRIGHT : INK;
-          alpha = Math.min(1, (0.05 + Math.pow(p.b, 0.8) * 0.85) * moodGlow);
-          r = (0.5 + p.b * 1.15) * (scale / 3.6);
+        if (p.kind === "pupil") {
+          alpha = 0.95;
+          r = 1.9 * (scale / 3.4);
         } else {
-          const nz2 = (p.nx ?? 0) * sinY + (p.nz ?? 0) * cosY;
-          const facing = Math.max(0, -nz2);
-          const depth = Math.max(0, Math.min(1, (45 - z2) / 90));
-          rgb = p.kind === "pupil" ? OXBRIGHT : INK;
-          alpha = p.kind === "pupil" ? 0.95 : (0.05 + depth * 0.22 + facing * 0.33) * moodGlow;
-          r = (0.55 + depth * 0.55 + facing * 0.35) * (p.kind === "pupil" ? 1.9 : 1) * (scale / 3.4);
+          const tex = p.b * p.tw; // portrait luminance where textured
+          alpha = Math.min(1, (0.05 + depth * 0.1 + facingCam * 0.14 + Math.pow(tex, 0.9) * 0.78) * moodGlow);
+          r = (0.5 + depth * 0.35 + tex * 1.05) * (scale / 3.5);
         }
 
-        if (Math.abs(p.y - scanY) < 3) alpha = Math.min(1, alpha + 0.28);
+        if (Math.abs(p.y - scanY) < 3) alpha = Math.min(1, alpha + 0.26);
         if ((inGlitch || hardError) && Math.abs(p.y - (hardError ? ((t / 50) % 84) - 40 : glitchY)) < (hardError ? 15 : 5)) {
           px += hardError ? (Math.random() - 0.5) * 8 : 3.5;
           rgb = OXBRIGHT;
@@ -325,29 +340,22 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
       ctx.fillRect(cx - w, Math.min(baseY, size - 2), w * 2, 1.5);
     };
 
-    const start = () => {
-      if (cancelled) return;
-      draw(performance.now());
-      if (!reduced) {
-        const loop = (t: number) => {
-          draw(t);
-          raf = requestAnimationFrame(loop);
-        };
-        raf = requestAnimationFrame(loop);
-      }
+    // First frame synchronously (untextured shell), then the loop; the
+    // portrait bakes in as soon as it loads — no restart needed.
+    draw(performance.now());
+    const loop = (t: number) => {
+      draw(t);
+      raf = requestAnimationFrame(loop);
     };
+    if (!reduced) raf = requestAnimationFrame(loop);
 
-    loadImageCloud(coarse ? 3 : 2)
-      .then((pts) => {
-        imageMode = true;
-        cloud = pts;
-        start();
+    loadPortraitSampler()
+      .then((sample) => {
+        if (cancelled) return;
+        texturize(cloud, sample);
+        if (reduced) draw(performance.now());
       })
-      .catch((err) => {
-        console.warn("Nova: image cloud unavailable, using parametric bust —", err);
-        cloud = buildFallbackBust();
-        start();
-      });
+      .catch((err) => console.warn("Nova: portrait unavailable, rendering untextured bust —", err));
 
     return () => {
       cancelled = true;
