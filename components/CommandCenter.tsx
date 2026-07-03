@@ -55,7 +55,7 @@ export function CommandCenter() {
       lines.push(`${q.platformLabel} post queued — ${formatSgt(q.scheduledAt)}`);
     }
     if (data.approved.length > 0) lines.push(`${data.approved.length} approved, awaiting publisher cron`);
-    if (data.manual.length > 0) lines.push(`${data.manual.length} IG item${data.manual.length === 1 ? "" : "s"} to post manually`);
+    if (data.manual.length > 0) lines.push(`${data.manual.length} item${data.manual.length === 1 ? "" : "s"} ready to post — copy from the queue`);
     for (const p of data.posted.slice(0, 2)) lines.push(`Posted: ${p.title || p.platformLabel}`);
     if (failures.length > 0) lines.push(`⚠ ${failures.length} publish failure${failures.length === 1 ? "" : "s"} — check queue`);
     if (lines.length === 0) lines.push("Systems nominal — queue clear");

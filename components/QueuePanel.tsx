@@ -81,7 +81,7 @@ export function QueuePanel({
 
       {manual.length > 0 && (
         <>
-          <h3 className="mt-3 font-mono text-[9px] tracking-[0.2em] text-amber">APPROVED — POST MANUALLY (IG)</h3>
+          <h3 className="mt-3 font-mono text-[9px] tracking-[0.2em] text-amber">APPROVED — POST MANUALLY</h3>
           <ul className="mt-1">
             {manual.map((item) => (
               <Row key={item.id} item={item}>
