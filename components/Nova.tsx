@@ -59,18 +59,22 @@ function buildBust(dense: boolean): Pt[] {
     if (y < -35 || y > 44) return null;
     let r: number;
     if (y <= -12) {
+      // cranium: wider, softer dome
       const t = (y + 12) / 23.5;
-      r = 22 * Math.sqrt(Math.max(0, 1 - t * t));
-    } else if (y <= 19) {
-      const t = (y + 12) / 31;
-      r = 22 * (1 - 0.58 * Math.pow(t, 1.6));
-    } else r = 9.2;
-    if (y > 14 && y <= 34) {
-      const t = Math.min(1, (y - 14) / 7);
-      r = r * (1 - t) + 8.8 * t;
-    } else if (y > 34) {
-      const t = (y - 34) / 19;
-      return { rx: 9 + Math.pow(t, 1.35) * 33, rz: 11 + t * 3 };
+      r = 23.5 * Math.sqrt(Math.max(0, 1 - t * t));
+    } else if (y <= 17) {
+      // face: taper to the chin
+      const t = (y + 12) / 29;
+      r = 23.5 * (1 - 0.6 * Math.pow(t, 1.6));
+    } else r = 9;
+    if (y > 12 && y <= 26) {
+      // short neck
+      const t = Math.min(1, (y - 12) / 6);
+      r = r * (1 - t) + 8.5 * t;
+    } else if (y > 26) {
+      // shoulders/trapezius: wide, rising quickly
+      const t = (y - 26) / 18;
+      return { rx: 8.5 + Math.pow(t, 1.2) * 36, rz: 10.5 + t * 4 };
     }
     return { rx: r * 0.94, rz: r * 1.06 };
   };
@@ -136,10 +140,10 @@ function buildBust(dense: boolean): Pt[] {
 
 function portraitUV(x: number, y: number): { u: number; v: number } {
   let v: number;
-  if (y <= 19) v = 0.06 + (y + 35) * ((0.625 - 0.06) / 54);
-  else v = 0.625 + (y - 19) * ((0.96 - 0.625) / 25);
+  if (y <= 17) v = 0.06 + (y + 35) * ((0.625 - 0.06) / 52);
+  else v = 0.625 + (y - 17) * ((0.97 - 0.625) / 27);
   // width factor widens from head to shoulders
-  const f = y <= 19 ? 0.00857 : 0.00857 + Math.min(1, (y - 19) / 15) * (0.012 - 0.00857);
+  const f = y <= 17 ? 0.0084 : 0.0084 + Math.min(1, (y - 17) / 14) * (0.0122 - 0.0084);
   return { u: 0.5 + x * f, v };
 }
 
@@ -297,8 +301,8 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
           r = 1.9 * (scale / 3.4);
         } else {
           const tex = p.b * p.tw; // portrait luminance where textured
-          alpha = Math.min(1, (0.05 + depth * 0.1 + facingCam * 0.14 + Math.pow(tex, 0.9) * 0.78) * moodGlow);
-          r = (0.5 + depth * 0.35 + tex * 1.05) * (scale / 3.5);
+          alpha = Math.min(1, (0.035 + depth * 0.07 + facingCam * 0.1 + Math.pow(tex, 0.85) * 0.9) * moodGlow);
+          r = (0.45 + depth * 0.3 + tex * 1.2) * (scale / 3.5);
         }
 
         if (Math.abs(p.y - scanY) < 3) alpha = Math.min(1, alpha + 0.26);
