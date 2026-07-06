@@ -92,7 +92,11 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
 
   return (
     <div className="flex flex-col items-center">
-      <div ref={figureRef} style={{ width: size, height: size, willChange: "transform, filter" }}>
+      <div
+        ref={figureRef}
+        className="relative"
+        style={{ width: size, height: size, willChange: "transform, filter" }}
+      >
         <div style={reduced ? undefined : { animation: "nova-breathe 6s ease-in-out infinite" }}>
           <div
             className="relative"
@@ -103,13 +107,13 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
               maskImage: feather,
             }}
           >
-            {/* the portrait — framed to her face, cool graphite hologram */}
+            {/* the portrait — cropped tight to her face, cool graphite hologram */}
             <div
               className="absolute inset-0"
               style={{
                 backgroundImage: "url(/nova.png)",
-                backgroundSize: "205%",
-                backgroundPosition: "40% 20%",
+                backgroundSize: "320%",
+                backgroundPosition: "46% 16%",
                 backgroundRepeat: "no-repeat",
                 filter: "grayscale(1) contrast(1.14) brightness(0.86)",
               }}
@@ -137,9 +141,13 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
             />
           </div>
         </div>
-      </div>
 
-      <NovaLine line={line} />
+        {/* speaking overlay — sits on the portrait itself, outside the feather
+            mask, so the caption stays crisp as she "speaks" it. Hidden
+            entirely while a calibration question card is up (line is blank
+            then; the card is her voice at that point). */}
+        <NovaCaption line={line} />
+      </div>
 
       <style>{`@keyframes nova-breathe {
         0%, 100% { transform: translateY(0); }
@@ -149,8 +157,14 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
   );
 }
 
-/** Typed speech line, mono, with a blinking cursor. Silent when blank. */
-function NovaLine({ line }: { line: string }) {
+/**
+ * Typed speech line, overlaid directly on the lower portrait — like she's
+ * speaking it, not a caption underneath the image. A dark scrim (oval, so it
+ * doesn't read as a hard rectangle against the feathered portrait) keeps the
+ * mono text legible over her. Silent when blank — the calibration card takes
+ * over as her voice while a question is up.
+ */
+function NovaCaption({ line }: { line: string }) {
   const [typed, setTyped] = useState("");
 
   useEffect(() => {
@@ -168,14 +182,21 @@ function NovaLine({ line }: { line: string }) {
     return () => clearInterval(id);
   }, [line]);
 
-  // When Nova is asking a calibration question, the floating card is her
-  // voice — suppress the redundant caption entirely.
   if (!line.trim()) return null;
 
   return (
-    <p className="mt-2 max-w-xl px-4 text-center font-mono text-[11px] leading-relaxed tracking-wider text-ink-dim">
-      <span className="text-oxbright">NOVA //</span> {typed}
-      <span className="animate-pulse text-oxbright">▍</span>
-    </p>
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center pb-[6%]">
+      <div
+        className="absolute inset-x-[-20%] bottom-[-10%] top-[30%]"
+        style={{
+          background:
+            "radial-gradient(ellipse 75% 90% at 50% 100%, rgba(6,7,8,0.95) 0%, rgba(6,7,8,0.72) 42%, transparent 75%)",
+        }}
+      />
+      <p className="relative max-w-[92%] px-4 text-center font-mono text-[11px] leading-relaxed tracking-wider text-ink">
+        <span className="text-oxbright">NOVA //</span> {typed}
+        <span className="animate-pulse text-oxbright">▍</span>
+      </p>
+    </div>
   );
 }
