@@ -126,10 +126,12 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
                 mixBlendMode: "screen",
               }}
             />
-            {/* deepen the base into the ground */}
+            {/* deepen the base into the ground — matches the page ground
+                token so she fades into the actual surface, not a hardcoded
+                dark patch (breaks if the theme's ground colour changes) */}
             <div
               className="absolute inset-0"
-              style={{ background: "linear-gradient(to bottom, transparent 55%, #0a0b0d 96%)" }}
+              style={{ background: "linear-gradient(to bottom, transparent 55%, var(--color-ground) 96%)" }}
             />
             {/* holographic scanlines */}
             <div
@@ -193,7 +195,10 @@ function NovaCaption({ line }: { line: string }) {
             "radial-gradient(ellipse 75% 90% at 50% 100%, rgba(6,7,8,0.95) 0%, rgba(6,7,8,0.72) 42%, transparent 75%)",
         }}
       />
-      <p className="relative max-w-[92%] px-4 text-center font-mono text-[11px] leading-relaxed tracking-wider text-ink">
+      {/* Text colour is pinned to Splash "clay" (not the --color-ink token),
+          because the scrim behind it is deliberately dark regardless of the
+          page theme — she's a lit screen, like captions on a video. */}
+      <p className="relative max-w-[92%] px-4 text-center font-mono text-[11px] leading-relaxed tracking-wider text-[#e8e8e3]">
         <span className="text-oxbright">NOVA //</span> {typed}
         <span className="animate-pulse text-oxbright">▍</span>
       </p>

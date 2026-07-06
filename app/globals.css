@@ -1,18 +1,22 @@
 @import "tailwindcss";
 
 @theme {
-  /* Mission Control ground (PRD §5.2) */
-  --color-ground: #121316;
-  --color-panel: #0e0f11;
-  --color-ink: #e8e8e3;
-  --color-ink-dim: #9a9b94;
-  --color-slate: #8a8f98;
-  --color-hairline: rgba(255, 255, 255, 0.12);
-  --color-hairline-faint: rgba(255, 255, 255, 0.06);
+  /* Mission Control ground — Splash Co. brand palette, light "still water"
+     surface (PRD §5.2 tonal-contrast case): plate/clay/graphite/slate/
+     titanium/hairline are the actual brand tokens; oxblood is unchanged
+     across themes. Phosphor/amber are bespoke status tones (not brand
+     tokens) darkened slightly here for legibility on the lighter ground. */
+  --color-ground: #f2f2ef; /* Splash "plate" */
+  --color-panel: #e8e8e3; /* Splash "clay" */
+  --color-ink: #191a1c; /* Splash "graphite" */
+  --color-ink-dim: #6b6e70; /* Splash "slate" */
+  --color-slate: #8c9093; /* Splash "titanium" */
+  --color-hairline: rgba(25, 26, 28, 0.14);
+  --color-hairline-faint: rgba(25, 26, 28, 0.07);
   --color-oxblood: #7d0607;
   --color-oxbright: #a61b1c;
-  --color-phosphor: #5a7d5a;
-  --color-amber: #8f7a45;
+  --color-phosphor: #3f6b3f;
+  --color-amber: #7d6a3a;
 
   --font-sans: var(--font-grotesk), system-ui, sans-serif;
   --font-serif: var(--font-newsreader), Georgia, serif;
@@ -22,8 +26,8 @@
 /* Faint 8px grid on the ground, ≤3% opacity — instrument panel, not neon. */
 .scanlines {
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+    linear-gradient(rgba(25, 26, 28, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(25, 26, 28, 0.028) 1px, transparent 1px);
   background-size: 8px 8px;
 }
 
@@ -62,5 +66,5 @@
 /* Hairline scrollbars */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  scrollbar-color: rgba(25, 26, 28, 0.18) transparent;
 }

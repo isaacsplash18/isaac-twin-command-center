@@ -40,12 +40,12 @@ function Gauge3D({ value, windowDays }: { value: number | null; windowDays: numb
               y1={115 + Math.sin(a) * 100}
               x2={115 + Math.cos(a) * (i % 4 === 0 ? 92 : 96)}
               y2={115 + Math.sin(a) * (i % 4 === 0 ? 92 : 96)}
-              stroke={`rgba(232,232,227,${i % 4 === 0 ? 0.3 : 0.12})`}
+              stroke={`rgba(25,26,28,${i % 4 === 0 ? 0.3 : 0.12})`}
               strokeWidth="1"
             />
           ))}
           {/* base ring */}
-          <circle cx="115" cy="115" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="6" />
+          <circle cx="115" cy="115" r={R} fill="none" stroke="rgba(25,26,28,0.08)" strokeWidth="6" />
           {/* progress arc, glowing */}
           <circle
             cx="115"
@@ -72,10 +72,10 @@ function Gauge3D({ value, windowDays }: { value: number | null; windowDays: numb
           )}
           {/* rotating inner dial */}
           <g className="motion-safe:animate-[spin_28s_linear_infinite]" style={{ transformOrigin: "115px 115px" }}>
-            <circle cx="115" cy="115" r="62" fill="none" stroke="rgba(232,232,227,0.14)" strokeWidth="1" strokeDasharray="3 9" />
+            <circle cx="115" cy="115" r="62" fill="none" stroke="rgba(25,26,28,0.14)" strokeWidth="1" strokeDasharray="3 9" />
             <circle cx="115" cy="115" r="50" fill="none" stroke="rgba(166,27,28,0.25)" strokeWidth="1" strokeDasharray="30 190" />
           </g>
-          <circle cx="115" cy="115" r="36" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="10" />
+          <circle cx="115" cy="115" r="36" fill="none" stroke="rgba(25,26,28,0.06)" strokeWidth="10" />
         </svg>
       </div>
       {/* upright readout floating above the tilted plane */}
@@ -95,7 +95,7 @@ function Sparkline({ values }: { values: number[] }) {
   const pts = values.map((v, i) => `${(i / (values.length - 1)) * 100},${28 - (v / max) * 24}`).join(" ");
   return (
     <svg viewBox="0 0 100 30" preserveAspectRatio="none" className="h-6 w-full" aria-hidden>
-      <polyline points={pts} fill="none" stroke="rgba(232,232,227,0.35)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+      <polyline points={pts} fill="none" stroke="rgba(25,26,28,0.35)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }
