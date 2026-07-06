@@ -3,12 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
- * NOVA — the twin's face: the actual Nova render (public/nova.png), recoloured
- * into the mission-control theme. She's framed to her face, desaturated to a
- * cool graphite hologram, edge-feathered so she dissolves into the ground, lit
- * with an oxblood rim glow (the scarcity accent), and overlaid with faint
- * scanlines. She breathes, tilts toward the cursor, blooms oxblood on Approve
- * and shudders red on failure. Pure CSS/DOM — no canvas, no deps.
+ * NOVA — the twin's face: the actual Nova render (public/nova.png), background
+ * removed (real alpha cutout, not a photo crop) so she reads as a floating
+ * presence rather than a framed photograph. In full colour now that the
+ * ground is light. The same cutout doubles as a CSS mask on the wrapping
+ * element, so the rim-light/scanline/ground-fade overlay layers clip to her
+ * exact silhouette instead of painting a rectangle into the transparent
+ * background around her. She breathes, tilts toward the cursor, blooms
+ * oxblood on Approve and shudders red on failure. Pure CSS/DOM — no canvas,
+ * no deps.
  */
 
 const OXBRIGHT = "166,27,28";
@@ -86,9 +89,15 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
     };
   }, [baseGlow, reduced]);
 
-  // Oval feather so she dissolves into the ground — no rectangle edge.
-  const feather =
-    "radial-gradient(ellipse 60% 68% at 50% 40%, #000 46%, rgba(0,0,0,0.6) 66%, transparent 100%)";
+  // The cutout's own alpha channel, reused as a CSS mask so the overlay
+  // layers (rim light, ground-fade, scanlines) clip to her real silhouette
+  // instead of showing as a rectangle in the now-transparent background.
+  const portraitFrame = {
+    backgroundImage: "url(/nova.png)",
+    backgroundSize: "320%",
+    backgroundPosition: "46% 16%",
+    backgroundRepeat: "no-repeat",
+  } as const;
 
   return (
     <div className="flex flex-col items-center">
@@ -103,26 +112,25 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
             style={{
               width: size,
               height: size,
-              WebkitMaskImage: feather,
-              maskImage: feather,
+              WebkitMaskImage: portraitFrame.backgroundImage,
+              maskImage: portraitFrame.backgroundImage,
+              WebkitMaskSize: portraitFrame.backgroundSize,
+              maskSize: portraitFrame.backgroundSize,
+              WebkitMaskPosition: portraitFrame.backgroundPosition,
+              maskPosition: portraitFrame.backgroundPosition,
+              WebkitMaskRepeat: "no-repeat",
+              maskRepeat: "no-repeat",
             }}
           >
-            {/* the portrait — cropped tight to her face, cool graphite hologram */}
+            {/* the portrait itself, full colour now the ground is light —
+                just a light polish, no grayscale/darkening */}
+            <div className="absolute inset-0" style={{ ...portraitFrame, filter: "contrast(1.04) saturate(1.06)" }} />
+            {/* faint oxblood rim light — kept subtle so it reads as a glow
+                accent, not a colour cast over her actual colours */}
             <div
               className="absolute inset-0"
               style={{
-                backgroundImage: "url(/nova.png)",
-                backgroundSize: "320%",
-                backgroundPosition: "46% 16%",
-                backgroundRepeat: "no-repeat",
-                filter: "grayscale(1) contrast(1.14) brightness(0.86)",
-              }}
-            />
-            {/* faint oxblood rim light — the only tint; she stays graphite */}
-            <div
-              className="absolute inset-0"
-              style={{
-                background: `linear-gradient(105deg, rgba(${OXBRIGHT},0.18) 0%, rgba(${OXBRIGHT},0) 30%)`,
+                background: `linear-gradient(105deg, rgba(${OXBRIGHT},0.12) 0%, rgba(${OXBRIGHT},0) 26%)`,
                 mixBlendMode: "screen",
               }}
             />
@@ -137,8 +145,8 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
             <div
               className="absolute inset-0"
               style={{
-                backgroundImage: "repeating-linear-gradient(0deg, rgba(232,232,227,0.06) 0 1px, transparent 1px 4px)",
-                mixBlendMode: "overlay",
+                backgroundImage: "repeating-linear-gradient(0deg, rgba(25,26,28,0.05) 0 1px, transparent 1px 4px)",
+                mixBlendMode: "multiply",
               }}
             />
           </div>
@@ -187,18 +195,17 @@ function NovaCaption({ line }: { line: string }) {
   if (!line.trim()) return null;
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center pb-[6%]">
-      <div
-        className="absolute inset-x-[-20%] bottom-[-10%] top-[30%]"
-        style={{
-          background:
-            "radial-gradient(ellipse 75% 90% at 50% 100%, rgba(6,7,8,0.95) 0%, rgba(6,7,8,0.72) 42%, transparent 75%)",
-        }}
-      />
-      {/* Text colour is pinned to Splash "clay" (not the --color-ink token),
-          because the scrim behind it is deliberately dark regardless of the
-          page theme — she's a lit screen, like captions on a video. */}
-      <p className="relative max-w-[92%] px-4 text-center font-mono text-[11px] leading-relaxed tracking-wider text-[#e8e8e3]">
+    <div className="pointer-events-none absolute inset-x-0 bottom-[9%] flex justify-center px-6">
+      {/* A self-contained caption chip, not a scrim bleeding across the box —
+          she's a floating cutout now (transparent background), so anything
+          wider than the text itself would show as a stray rectangle rather
+          than blending into a photo edge. Colour pinned to Splash "clay"
+          regardless of the page theme, since this chip is deliberately dark
+          — she's a lit screen, like captions on a video. */}
+      <p
+        className="relative max-w-[88%] rounded px-3 py-1.5 text-center font-mono text-[11px] leading-relaxed tracking-wider text-[#e8e8e3]"
+        style={{ background: "rgba(6,7,8,0.82)" }}
+      >
         <span className="text-oxbright">NOVA //</span> {typed}
         <span className="animate-pulse text-oxbright">▍</span>
       </p>
