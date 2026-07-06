@@ -384,7 +384,7 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
   );
 }
 
-/** Typed speech line, mono, with a blinking cursor. */
+/** Typed speech line, mono, with a blinking cursor. Silent when blank. */
 function NovaLine({ line }: { line: string }) {
   const [typed, setTyped] = useState("");
 
@@ -402,6 +402,10 @@ function NovaLine({ line }: { line: string }) {
     }, 18);
     return () => clearInterval(id);
   }, [line]);
+
+  // When Nova is asking a calibration question, the floating card is her
+  // voice — suppress the redundant caption entirely.
+  if (!line.trim()) return null;
 
   return (
     <p className="mt-1 max-w-xl px-4 text-center font-mono text-[11px] leading-relaxed tracking-wider text-ink-dim">

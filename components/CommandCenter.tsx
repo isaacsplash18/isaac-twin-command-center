@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApprovalQueue } from "./ApprovalQueue";
 import { BootSequence } from "./BootSequence";
-import { CalibrationPanel } from "./CalibrationPanel";
 import { CommandPalette, PaletteAction } from "./CommandPalette";
 import { KpiPanel } from "./KpiPanel";
-import { Nova } from "./Nova";
+import { NovaStage } from "./NovaStage";
 import { novaState } from "./novaVoice";
 import { QueuePanel } from "./QueuePanel";
 import { AutomationsPanel, InputsPanel, PositionsPanel } from "./SidePanels";
@@ -199,19 +198,37 @@ export function CommandCenter() {
         </div>
       )}
 
-      <main className="mx-auto max-w-6xl p-4 sm:p-6">
-        {/* NOVA — the twin, centre stage */}
-        <section aria-label="Nova" className="mb-6 flex justify-center">
-          <Nova mood={nova.mood} line={nova.lines[novaIdx % nova.lines.length]} />
-        </section>
+      <main className="mx-auto max-w-[1400px] p-4 sm:p-6">
+        {/* Cockpit: modules left and right, Nova (asking calibration
+            questions one at a time) centre stage */}
+        <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)_300px]">
+          <div className="order-2 flex flex-col gap-4 lg:order-1">
+            <QueuePanel
+              approved={data?.approved ?? []}
+              queued={data?.queued ?? []}
+              posted={data?.posted ?? []}
+              manual={data?.manual ?? []}
+              rejected={data?.rejected ?? []}
+              index={1}
+              onChanged={() => queue.refresh()}
+              onError={toast}
+            />
+            <KpiPanel index={2} />
+          </div>
 
-        {/* Weekly calibration — the loop that keeps the Constitution alive */}
-        <section aria-label="Weekly calibration" className="mb-6">
-          <CalibrationPanel onToast={toast} />
-        </section>
+          <section aria-label="Nova" className="order-1 flex justify-center lg:order-2">
+            <NovaStage mood={nova.mood} idleLine={nova.lines[novaIdx % nova.lines.length]} onToast={toast} />
+          </section>
 
-        <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
-        <div>
+          <div className="order-3 flex flex-col gap-4">
+            <PositionsPanel data={panels.data?.positions} index={3} />
+            <InputsPanel inbox={panels.data?.inbox} wiki={panels.data?.wiki} index={4} />
+            <AutomationsPanel index={5} />
+          </div>
+        </div>
+
+        {/* Below the stage: the approval queue, full width */}
+        <div className="mt-6">
           {queue.loading && !data ? (
             <div className="border border-hairline bg-panel p-8 text-center">
               <p className="font-mono text-xs tracking-[0.2em] text-ink-dim">LOADING DRAFTS…</p>
@@ -226,24 +243,6 @@ export function CommandCenter() {
               onToast={toast}
             />
           )}
-        </div>
-
-        <div className="flex flex-col gap-4">
-          <QueuePanel
-            approved={data?.approved ?? []}
-            queued={data?.queued ?? []}
-            posted={data?.posted ?? []}
-            manual={data?.manual ?? []}
-            rejected={data?.rejected ?? []}
-            index={1}
-            onChanged={() => queue.refresh()}
-            onError={toast}
-          />
-          <KpiPanel index={2} />
-          <PositionsPanel data={panels.data?.positions} index={3} />
-          <InputsPanel inbox={panels.data?.inbox} wiki={panels.data?.wiki} index={4} />
-          <AutomationsPanel index={5} />
-        </div>
         </div>
       </main>
 
