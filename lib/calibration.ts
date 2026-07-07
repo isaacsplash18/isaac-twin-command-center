@@ -23,6 +23,7 @@
 
 import { listBlocks, notionFetch, plainText } from "./notion";
 import { CalibrationAction, logCalibrationEvent } from "./calibration-events";
+import { maybeCreateProposalFromEvent } from "./proposals";
 
 const DEFAULT_SURVEY_PAGE = "36f1fec9ef8381ceb927eca8fa3c5ed6";
 
@@ -198,7 +199,7 @@ export async function submitAnswer(opts: {
       : opts.verdict === "Sharpen"
         ? "position-sharpened"
         : "position-contested";
-  await logCalibrationEvent({
+  const event = await logCalibrationEvent({
     action,
     objectType: "calibration_card",
     objectId: opts.answerBlockId,
@@ -207,6 +208,11 @@ export async function submitAnswer(opts: {
     inferredDelta,
     status: opts.verdict === "Confirm" ? "accepted" : "pending",
   });
+
+  // Phase 4: deterministically turn a sharpen/reject verdict into a *pending*
+  // PositionUpdateProposal. Fire-and-forget safe (never throws, returns null on
+  // any gap) — the answer is already saved regardless.
+  await maybeCreateProposalFromEvent(event);
 
   return { calibrated };
 }

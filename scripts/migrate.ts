@@ -14,6 +14,9 @@
  * 4. Creates the "Calibration Events" DB under the Constitution hub if
  *    missing (Phase 3 — see docs/hermes-calibration-plan.md §4.1) and prints
  *    its data source id for DS_CALIBRATION_EVENTS.
+ * 5. Creates the "Position Proposals" DB under the Constitution hub if
+ *    missing (Phase 4 — see docs/hermes-calibration-plan.md §4.2) and prints
+ *    its data source id for DS_PROPOSALS.
  */
 
 import "dotenv/config";
@@ -278,6 +281,59 @@ async function ensureCalibrationEventsDb(): Promise<void> {
   console.log(`  + Created under Constitution hub. Set DS_CALIBRATION_EVENTS=${dsId}`);
 }
 
+async function ensurePositionProposalsDb(): Promise<void> {
+  console.log(`\n— Position Proposals`);
+  // Search-first for an existing data source with this title (same
+  // idempotency style as ensureEventsDb / ensureCalibrationEventsDb).
+  const search = await notion(`/search`, {
+    method: "POST",
+    body: JSON.stringify({ query: "Position Proposals", filter: { property: "object", value: "data_source" } }),
+  });
+  const existing = (search.results ?? []).find(
+    (ds: Json) => ((ds.title ?? []).map((t: Json) => t.plain_text).join("") || "").trim() === "Position Proposals"
+  );
+  if (existing) {
+    console.log(`  = Already exists. DS_PROPOSALS=${existing.id}`);
+    return;
+  }
+  const db = await notion(`/databases`, {
+    method: "POST",
+    body: JSON.stringify({
+      parent: { type: "page_id", page_id: HUB_PAGE_ID },
+      title: [{ type: "text", text: { content: "Position Proposals" } }],
+      initial_data_source: {
+        properties: {
+          Name: { title: {} },
+          "Source Event IDs": { rich_text: {} },
+          "Affected Position ID": { rich_text: {} },
+          Topic: { rich_text: {} },
+          "Current Position Text": { rich_text: {} },
+          "Proposed Position Text": { rich_text: {} },
+          Reason: { rich_text: {} },
+          "Evidence Summary": { rich_text: {} },
+          Confidence: {
+            select: {
+              options: [{ name: "low" }, { name: "medium" }, { name: "high" }],
+            },
+          },
+          Status: {
+            select: {
+              options: [
+                { name: "pending" },
+                { name: "accepted" },
+                { name: "rejected" },
+                { name: "applied" },
+              ],
+            },
+          },
+        },
+      },
+    }),
+  });
+  const dsId = db.data_sources?.[0]?.id ?? "(check the new DB in Notion)";
+  console.log(`  + Created under Constitution hub. Set DS_PROPOSALS=${dsId}`);
+}
+
 async function main() {
   console.log(`Notion-Version: ${VERSION}`);
   console.log("Additive schema migration — existing properties are never renamed or removed.");
@@ -297,6 +353,11 @@ async function main() {
     await ensureCalibrationEventsDb();
   } catch (err) {
     console.log(`✗ Calibration Events: ${err instanceof Error ? err.message : err}`);
+  }
+  try {
+    await ensurePositionProposalsDb();
+  } catch (err) {
+    console.log(`✗ Position Proposals: ${err instanceof Error ? err.message : err}`);
   }
   console.log("\nDone. Re-running is safe (idempotent).");
 }

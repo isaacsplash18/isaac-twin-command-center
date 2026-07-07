@@ -9,7 +9,8 @@
     "lint": "next lint",
     "discover": "tsx scripts/discover.ts",
     "migrate": "tsx scripts/migrate.ts",
-    "verify:calibration-events": "tsx scripts/verify-calibration-events.ts"
+    "verify:calibration-events": "tsx scripts/verify-calibration-events.ts",
+    "verify:proposals": "tsx scripts/verify-proposals.ts"
   },
   "dependencies": {
     "framer-motion": "^11.15.0",

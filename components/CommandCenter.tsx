@@ -8,6 +8,7 @@ import { KpiPanel } from "./KpiPanel";
 import { NovaStage } from "./NovaStage";
 import { novaState } from "./novaVoice";
 import { QueuePanel } from "./QueuePanel";
+import { ProposalsPanel } from "./ProposalsPanel";
 import { AutomationsPanel, InputsPanel, PositionsPanel } from "./SidePanels";
 import { Ticker } from "./Ticker";
 import { postAction, useApi } from "./useApi";
@@ -221,9 +222,10 @@ export function CommandCenter() {
           </section>
 
           <div className="order-3 flex flex-col gap-4">
-            <PositionsPanel data={panels.data?.positions} index={3} />
-            <InputsPanel inbox={panels.data?.inbox} wiki={panels.data?.wiki} index={4} />
-            <AutomationsPanel index={5} />
+            <ProposalsPanel index={3} onError={toast} />
+            <PositionsPanel data={panels.data?.positions} index={4} />
+            <InputsPanel inbox={panels.data?.inbox} wiki={panels.data?.wiki} index={5} />
+            <AutomationsPanel index={6} />
           </div>
         </div>
 

@@ -346,3 +346,95 @@ gracefully — logs a warning and no-ops — while it's unset).
 the "Calibration Events" database from the UI — it's additive and nothing else depends on
 it. Unset `DS_CALIBRATION_EVENTS` to make the app treat it as not-yet-migrated again
 (logging becomes a no-op warning, same as before this phase).
+
+### Phase 4 — Pending Position Update Proposals
+
+**Files changed:**
+
+- `lib/proposals.ts` (new) — `PositionUpdateProposal` interface (§4.2: `id`,
+  `createdAt`/`updatedAt` from Notion `created_time`/`last_edited_time`, `sourceEventIds`,
+  `affectedPositionId`, `topic`, `currentPositionText`, `proposedPositionText`, `reason`,
+  `evidenceSummary`, `confidence`, `status`) + `ProposalConfidence`/`ProposalStatus` unions.
+  - `maybeCreateProposalFromEvent(event)` — deterministic v1 generator (no LLM). Only fires
+    for `sharpen` (confidence `medium`) and `reject`-verdict (confidence `low`) calibration
+    events, and only when `rawUserText` is non-empty AND `affectedPositionIds` has ≥1 id;
+    otherwise returns `null` (never guesses). Idempotency: query-before-create — if a
+    `pending` proposal already exists for the same `Affected Position ID`, returns `null`
+    (no duplicate, no merge in v1). `currentPositionText` = a read-only snapshot of the
+    Position page (title via `readTitle`, plus optional `Nuance`/`Basis` rich_text read
+    defensively — absent props tolerated). `proposedPositionText` = the event's `rawUserText`
+    verbatim; the framing lives in `Reason` (`Isaac's own words from a SHARPEN verdict on the
+    weekly survey` / `REJECT verdict — position contested`). `evidenceSummary` = deterministic
+    `{action} · event {id} · {ISO date}`. Status `pending`. Fire-and-forget safe: warns +
+    returns `null` when `DS_PROPOSALS` unset, never throws.
+  - `queryProposals({ status?, limit? })` — newest-first, `[]` when unconfigured.
+  - `getProposal(id)` — single re-read (for the route guard).
+  - `setProposalStatus(id, "accepted" | "rejected")` — flips the `Status` select only.
+    Deliberately touches nothing canonical (Positions Library / survey page / twin repo) —
+    §8 rule 5: `accepted ≠ applied`.
+- `lib/calibration.ts` — `submitAnswer()` now captures the `CalibrationEvent` returned by
+  `logCalibrationEvent` and calls `maybeCreateProposalFromEvent(event)` right after (the only
+  v1 source of sharpen/reject-with-position events). Draft approve/reject/edit are NOT wired
+  (no linked positions there — Phase 3 limitation).
+- `app/api/proposals/route.ts` (new) — `GET ?status=&limit=`, session-authed via middleware,
+  returns `{ proposals: [...] }`.
+- `app/api/proposals/[id]/accept/route.ts` + `.../reject/route.ts` (new) — `handleAction`
+  pattern; re-read before write and **409 if the proposal is not currently `pending`** (same
+  discipline as `lib/actions.ts`); return the updated proposal.
+- `components/ProposalsPanel.tsx` (new) — `PROPOSED UPDATES` FrameCard, mounted in
+  `components/CommandCenter.tsx` right column ABOVE `PositionsPanel` (index 3; Positions/
+  Inputs/Automations bumped to 4/5/6). Per proposal: topic + confidence chip (oxbright/amber/
+  phosphor for low/medium/high), CURRENT→PROPOSED (font-serif; current `text-ink-dim`, proposed
+  `text-ink`), reason, ACCEPT/REJECT MiniBtns. Optimistic remove with restore-on-error + toast
+  via `onError`. Fetches `useApi("/api/proposals?status=pending", 120_000)`. Renders `null`
+  when there are no pending proposals (panel disappears). Accept toast text is exactly
+  `ACCEPTED — APPLY TO NOTION MANUALLY (NOT AUTO-APPLIED)`.
+- `scripts/migrate.ts` — added `ensurePositionProposalsDb()` (search-first idempotent create,
+  same pattern as `ensureCalibrationEventsDb`); prints `DS_PROPOSALS=<id>`. Wired into `main()`.
+  **Not run by this phase.**
+- `.env.example` — added `DS_PROPOSALS=` with the migration comment.
+- `scripts/verify-proposals.ts` (new) + `package.json` `verify:proposals` script — exits 0
+  with a "run migration first" message when `DS_PROPOSALS` unset; otherwise runs the generator
+  negative gates in memory (confirm / empty text / no position → `null`) plus a `DS_PROPOSALS`
+  round-trip on a directly-created proposal page (query → accept → re-read → archive). Optional
+  `--position-id <id>` adds an end-to-end generation + idempotency check against a real
+  position, archiving what it creates.
+- this doc (§9, this section).
+
+**New env vars:** `DS_PROPOSALS` (created by `npm run migrate`; app degrades gracefully —
+generation and queries no-op — while unset).
+
+**How to verify:**
+
+1. Orchestrator runs `npm run migrate` and pastes the printed `DS_PROPOSALS` into `.env` /
+   Vercel.
+2. `npm run verify:proposals` (optionally `-- --position-id <id>`) — prints PASS/FAIL per
+   assertion; creates and archives only throwaway pages.
+3. `npx next build` stays green (verified this phase — clean build; routes present:
+   `/api/proposals`, `/api/proposals/[id]/accept`, `/api/proposals/[id]/reject`).
+4. Manual smoke test against `npm run dev`: submit a calibration answer with a SHARPEN or
+   REJECT verdict on a question that has a linked Position → a pending proposal appears in the
+   PROPOSED UPDATES panel; ACCEPT shows the manual-apply toast and removes it; the Positions
+   Library is unchanged (accept is status-flip only).
+
+**Limitations:**
+
+- No dedup/merge of multiple events into one proposal. Idempotency is a hard skip: if a pending
+  proposal already exists for a position, later sharpen/reject verdicts on it generate nothing
+  (the newest signal is silently dropped until the existing one is accepted/rejected).
+- Only survey-sourced calibration events (`submitAnswer`) generate proposals. Draft approve/
+  reject/edit carry no linked positions, so they never produce proposals.
+- `accepted ≠ applied`: accepting flips `Status` only. Writing the proposed text back to the
+  canonical Positions Library / twin repo stays manual for v1 (a future explicit "apply" action
+  may automate it — never automatic).
+- `currentPositionText` is a best-effort snapshot; if the Position page can't be read it stores
+  a `(could not read position …)` marker rather than inventing text.
+- Proposal `Topic`/`Name` fall back to the Position title then the position id, since
+  `submitAnswer`'s CalibrationEvent has no `topic` (Phase 3 limitation).
+
+**Rollback:** `git revert` this phase's commit (removes `lib/proposals.ts`, the proposals
+routes, the panel, the `submitAnswer` generation call, and the migration/env additions). In
+Notion, archive the "Position Proposals" database from the UI — it's additive and nothing else
+depends on it. Unset `DS_PROPOSALS` to make the app treat it as not-yet-migrated (generation and
+queries no-op, same as before this phase). No canonical data is ever touched by this phase, so
+there is nothing to un-apply.
