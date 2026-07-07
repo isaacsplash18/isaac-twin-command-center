@@ -3,12 +3,13 @@
  * plus status-filtered queries used by the queue API and the crons.
  */
 
-import { PLATFORMS, PlatformConfig, PlatformKey, dataSourceId } from "./config";
+import { PLATFORMS, PlatformConfig, PlatformKey, dataSourceId, platform } from "./config";
 import {
   NotionPage,
   buildStatusUpdate,
   findProperty,
   getDataSourceSchema,
+  notionFetch,
   queryDataSource,
   readBody,
   readCheckboxProp,
@@ -17,6 +18,8 @@ import {
   readSelectProp,
   readStatus,
   readTitle,
+  richTextValue,
+  titlePropertyName,
 } from "./notion";
 
 export interface ContentItem {
@@ -114,3 +117,145 @@ export function platformFromPage(page: NotionPage): PlatformConfig | null {
 }
 
 export { buildStatusUpdate };
+
+// ---------------------------------------------------------------------------
+// Draft creation bridge (Phase 7 — docs/hermes-calibration-plan.md §4.4)
+//
+// This is the inverse of readItemBody: given a platform + title + body (and
+// optional Hermes provenance fields), create a new Draft-status page in the
+// right content DB. Never publishes, never sets any status other than
+// "Draft" — the page lands in the existing approval queue with zero UI
+// changes. The four provenance properties (Created By / Source Workflow /
+// Humanizer / Source Position IDs) are additive Notion schema (see
+// scripts/migrate.ts) and are written defensively: if a content DB hasn't
+// been migrated yet, the create is retried without them and a warning is
+// returned rather than failing the whole request.
+// ---------------------------------------------------------------------------
+
+/** Thrown for bad input; carries an HTTP status the route can use directly (400 by default). */
+export class DraftInputError extends Error {
+  constructor(
+    message: string,
+    public status = 400
+  ) {
+    super(message);
+  }
+}
+
+const MAX_DRAFT_BODY_LENGTH = 20_000;
+
+/** Accepts either the app's hyphenated platform keys or the export schema's snake_case aliases. */
+export function normalizePlatformKey(input: string): PlatformKey | null {
+  const key = (input ?? "").trim().toLowerCase().replace(/_/g, "-");
+  const found = PLATFORMS.find((p) => p.key === key);
+  return found ? found.key : null;
+}
+
+export interface CreateDraftInput {
+  platform: string;
+  title: string;
+  body: string;
+  sourcePositionIds?: string[];
+  sourceWorkflow?: string;
+  humanizerStatus?: "passed" | "failed" | "unknown";
+  createdBy?: "hermes" | "agent";
+}
+
+export interface CreateDraftResult {
+  id: string;
+  url: string;
+  platform: PlatformKey;
+  status: "Draft";
+  warnings: string[];
+}
+
+/** Split on blank lines into Notion paragraph blocks, mirroring writeBody's chunking rules (lib/notion.ts). */
+function paragraphBlocksForCreate(text: string) {
+  return text
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => ({
+      object: "block",
+      type: "paragraph",
+      paragraph: { rich_text: [{ type: "text", text: { content: p.slice(0, 2000) } }] },
+    }));
+}
+
+/** Matches the Notion "unknown property" validation error, regardless of which of the 4 additive props triggered it. */
+const SCHEMA_MISMATCH_PATTERN = /is not a property that exists|property that does not exist|is not a valid property/i;
+
+export async function createDraft(input: CreateDraftInput): Promise<CreateDraftResult> {
+  const platformKey = normalizePlatformKey(input.platform);
+  if (!platformKey) {
+    throw new DraftInputError(
+      `Unknown platform "${input.platform}" — expected one of: x, linkedin, ig-story (or ig_story), ig-carousel (or ig_carousel)`
+    );
+  }
+  const p = platform(platformKey);
+
+  const title = (input.title ?? "").trim();
+  if (!title) throw new DraftInputError("title is required");
+
+  const body = input.body ?? "";
+  if (!body.trim()) throw new DraftInputError("body is required");
+  if (body.length > MAX_DRAFT_BODY_LENGTH) {
+    throw new DraftInputError(`body exceeds ${MAX_DRAFT_BODY_LENGTH} characters (got ${body.length})`);
+  }
+
+  const createdBy = input.createdBy ?? "hermes";
+  const humanizerStatus = input.humanizerStatus ?? "unknown";
+  const dsId = dataSourceId(p);
+  const schema = await getDataSourceSchema(dsId);
+  const titleProp = titlePropertyName(schema);
+
+  const baseProperties: Record<string, unknown> = {
+    [titleProp]: { title: [{ type: "text", text: { content: title.slice(0, 2000) } }] },
+    ...(await buildStatusUpdate(dsId, "Draft")),
+  };
+  if (p.bodyProp) {
+    // IG Story ("IG Story Copy") / IG Carousel ("Caption") — body lives in a rich-text prop.
+    baseProperties[p.bodyProp] = richTextValue(body);
+  }
+
+  const provenanceProperties: Record<string, unknown> = {
+    "Created By": { select: { name: createdBy } },
+    Humanizer: { select: { name: humanizerStatus } },
+  };
+  if (input.sourceWorkflow?.trim()) {
+    provenanceProperties["Source Workflow"] = richTextValue(input.sourceWorkflow.trim());
+  }
+  if (input.sourcePositionIds?.length) {
+    provenanceProperties["Source Position IDs"] = richTextValue(input.sourcePositionIds.join(","));
+  }
+
+  // X/LinkedIn: body goes to page content (blocks), passed as `children` on create.
+  const children = p.bodyInPageContent && !p.bodyProp ? paragraphBlocksForCreate(body) : undefined;
+
+  const buildPayload = (properties: Record<string, unknown>) => ({
+    parent: { type: "data_source_id", data_source_id: dsId },
+    properties,
+    ...(children && children.length ? { children } : {}),
+  });
+
+  const warnings: string[] = [];
+  let page: NotionPage;
+  try {
+    page = await notionFetch(`/pages`, {
+      method: "POST",
+      body: JSON.stringify(buildPayload({ ...baseProperties, ...provenanceProperties })),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!SCHEMA_MISMATCH_PATTERN.test(message)) throw err;
+    warnings.push(
+      "Created By / Source Workflow / Humanizer / Source Position IDs not yet migrated (run npm run migrate) — draft created without them"
+    );
+    page = await notionFetch(`/pages`, {
+      method: "POST",
+      body: JSON.stringify(buildPayload(baseProperties)),
+    });
+  }
+
+  return { id: page.id, url: page.url, platform: platformKey, status: "Draft", warnings };
+}

@@ -59,6 +59,20 @@ const NEW_PROPS: Record<string, Json> = {
   "Approved At": { date: {} },
   "Edited Before Approval": { checkbox: {} },
   "Original Draft": { rich_text: {} },
+  // Phase 7 — draft creation bridge (docs/hermes-calibration-plan.md §4.4).
+  // Additive provenance props written by lib/items.ts `createDraft()`.
+  "Created By": {
+    select: {
+      options: [{ name: "agent" }, { name: "hermes" }, { name: "manual" }],
+    },
+  },
+  "Source Workflow": { rich_text: {} },
+  Humanizer: {
+    select: {
+      options: [{ name: "passed" }, { name: "failed" }, { name: "unknown" }],
+    },
+  },
+  "Source Position IDs": { rich_text: {} },
 };
 
 const STATUS_OPTIONS = ["Draft", "Approved", "Queued", "Posted", "Rejected"];
