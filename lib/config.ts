@@ -19,7 +19,7 @@ export interface PlatformConfig {
  * platform uses the manual copy-paste lane — Approve → COPY → Mark Posted.
  * Setting a Typefully key re-enables zero-touch publishing for X/LinkedIn.
  */
-const TYPEFULLY_ENABLED = !!process.env.TYPEFULLY_API_KEY && process.env.PUBLISH_MODE !== "manual";
+export const TYPEFULLY_ENABLED = !!process.env.TYPEFULLY_API_KEY && process.env.PUBLISH_MODE !== "manual";
 
 export const PLATFORMS: PlatformConfig[] = [
   { key: "x", label: "X", dsEnv: "DS_X", autoPublish: TYPEFULLY_ENABLED, bodyInPageContent: true },

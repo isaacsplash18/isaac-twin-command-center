@@ -438,3 +438,95 @@ Notion, archive the "Position Proposals" database from the UI — it's additive 
 depends on it. Unset `DS_PROPOSALS` to make the app treat it as not-yet-migrated (generation and
 queries no-op, same as before this phase). No canonical data is ever touched by this phase, so
 there is nothing to un-apply.
+
+### Phase 5 — Hermes-Readable Export
+
+**Files changed:**
+
+- `lib/machine-auth.ts` (new) — `isMachineAuthorized(req: NextRequest): boolean`. Compares
+  `Authorization: Bearer ${HERMES_API_TOKEN}` using `timingSafeEqualStr` (re-exported from
+  `lib/auth.ts` rather than duplicated). Returns `false` whenever `HERMES_API_TOKEN` is unset —
+  the machine lane is disabled by default, matching the `CRON_SECRET` convention. Never logs the
+  token or the incoming header.
+- `lib/auth.ts` — `timingSafeEqualStr` changed from a private function to `export function` so
+  `lib/machine-auth.ts` can reuse it instead of duplicating the constant-time compare. No
+  behaviour change to the existing passphrase check.
+- `lib/config.ts` — `TYPEFULLY_ENABLED` changed from a private `const` to `export const` so the
+  export route can derive `publisher.mode` the exact same way `PLATFORMS` does, without
+  duplicating the `!!process.env.TYPEFULLY_API_KEY && process.env.PUBLISH_MODE !== "manual"`
+  logic (and without ever exporting the key itself).
+- `app/api/hermes/export/route.ts` (new) — `GET` only, `dynamic = "force-dynamic"`. Auth via
+  `isMachineAuthorized` → `401 {"error":"Unauthorised"}` otherwise. Query params: `since` (ISO,
+  defaults to 7 days ago; invalid values silently fall back to the default), `limit` (default
+  100, clamped to 200, applies only to `events`). Response: `{ version: 1, generatedAt, since,
+  events, proposals: { pending, accepted }, drafts: { pendingReview }, publisher: { mode },
+  warnings }`. Each lane degrades independently and gracefully: unset `DS_CALIBRATION_EVENTS` /
+  `DS_PROPOSALS` / a content platform's `DS_*` env var yields an empty array/zero count for that
+  lane plus a named entry in the always-present `warnings: string[]` array (never a hard
+  failure). `drafts.pendingReview` sums `Status: Draft` counts across the 4 content DBs
+  (X/LinkedIn/IG Story/IG Carousel) via `itemsWithStatus`, tolerating the same
+  not-yet-migrated-schema case `/api/queue` already tolerates. No secrets anywhere in the
+  payload — `publisher.mode` is derived from `TYPEFULLY_ENABLED`, never the key itself.
+- `middleware.ts` — added `/api/hermes/` to `PUBLIC_PREFIXES` alongside `/api/cron/`, with a
+  comment explaining both prefixes self-authenticate (Bearer `CRON_SECRET` /
+  `HERMES_API_TOKEN`) and are therefore exempt from the human session-cookie check. No other
+  line in the file touched.
+- `.env.example` — added `HERMES_API_TOKEN=` with a comment (generate command, and a note that
+  leaving it empty disables the machine lane entirely).
+- `docs/hermes-integration.md` (new) — purpose, auth model, full `GET /api/hermes/export`
+  reference (params, annotated example response, field-by-field meaning — explicitly calling
+  out that `proposals.accepted` is **not** canonical/applied), curl examples for both
+  `http://localhost:3000` and the production URL, error codes table, versioning note.
+- `scripts/verify-hermes-export.ts` (new) — if `HERMES_API_TOKEN` is unset, prints "machine lane
+  disabled — set HERMES_API_TOKEN" and exits 0. Otherwise: asserts an unauthenticated request and
+  a wrong-token request both get `401`; asserts an authenticated request gets `200`; structurally
+  validates every top-level key, every `events[]`/`proposals.pending[]`/`proposals.accepted[]`
+  entry's field types, that all timestamps parse, that `events` is sorted newest-first, and that
+  no key anywhere in the payload matches a token/secret/apikey/password-like pattern. PASS/FAIL
+  per assertion, like the Phase 3/4 verify scripts.
+- `package.json` — added `verify:hermes-export` script.
+- this doc (§9, this section).
+
+**New env vars:** `HERMES_API_TOKEN` (machine lane token; the export route — and, in a later
+phase, the draft bridge — return `401` while it's unset, which is the safe default).
+
+**How to verify:**
+
+1. `npx next build` stays green (verified this phase — clean build; new route
+   `/api/hermes/export` present in the route list, no route or type errors).
+2. `npm run verify:hermes-export -- --url <base-url>` — prints "machine lane disabled" and exits
+   0 if `HERMES_API_TOKEN` is unset; otherwise runs the auth + schema assertions above and prints
+   PASS/FAIL per check. Exercised this phase against a **temporary** `PORT=3100 npx next dev`
+   process with an inline (not persisted) test token — never against port 3000, never written to
+   `.env`. All assertions passed, including a live pull of real Notion data (`drafts.pendingReview`
+   reflected the real Draft count across the 4 content DBs; `events`/`proposals` were empty
+   because no calibration events or proposals exist yet — `warnings` was `[]`, confirming
+   `DS_CALIBRATION_EVENTS`/`DS_PROPOSALS` are already configured in `.env` from Phases 3–4). The
+   temporary dev server was killed at the end of the smoke test.
+3. Manual smoke test against a real deployment: set `HERMES_API_TOKEN` in Vercel, then
+   `curl -H "Authorization: Bearer $HERMES_API_TOKEN"
+   https://isaac-twin-command-center.vercel.app/api/hermes/export` should return `200` with the
+   documented shape; the same request without the header should return `401`.
+
+**Limitations:**
+
+- `since` only filters `events`; `proposals.pending`/`proposals.accepted` are always the full
+  lists (each capped at 100 by `queryProposals`) — no time-windowing or pagination for proposals
+  yet, matching current single-user volume.
+- `events` has a hard `limit` cap (max 200), not a pagination cursor — acceptable for now, would
+  need revisiting if event volume grows much past that between Hermes sync runs.
+- `drafts.pendingReview` is a count only, not draft content — reading actual draft bodies over
+  the machine lane is intentionally out of scope until Phase 7 (and even then that phase is a
+  one-way Hermes → Command Center *write*, not a read of existing drafts).
+- No rate limiting on the endpoint, consistent with the rest of the app (single trusted caller
+  expected).
+- The route trusts `HERMES_API_TOKEN` as a single shared secret (no per-caller scoping/rotation
+  scheme) — fine for a single Hermes worker, would need revisiting for multiple machine callers.
+
+**Rollback:** `git revert` this phase's commit (removes `lib/machine-auth.ts`, the export route,
+the middleware public-list line, the docs, and the verify script; reverts `timingSafeEqualStr`
+and `TYPEFULLY_ENABLED` back to unexported — no other phase depends on those two exports yet, so
+this is safe). Removing `HERMES_API_TOKEN` from Vercel/`.env` alone is enough to disable the
+whole machine lane in one move without any code change — the route fails closed (`401`) whenever
+it's unset. No canonical data is ever touched by this phase (GET-only, read-only), so there is
+nothing to un-apply.
