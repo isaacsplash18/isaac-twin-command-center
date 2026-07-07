@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "generatedAt": "2026-07-07T09:00:00.000Z",
+  "since": "2026-06-30T09:00:00.000Z",
+  "events": [
+    {
+      "id": "1a2b3c4d-event-sharpen",
+      "createdAt": "2026-07-06T14:02:11.000Z",
+      "source": "command_center",
+      "objectType": "calibration_card",
+      "objectId": "block-abc123",
+      "platform": "unknown",
+      "topic": "Should Isaac take unsolicited investor calls?",
+      "action": "sharpen",
+      "rawUserText": "Only if a mutual intro vouches for them first.",
+      "previousText": "",
+      "newText": "",
+      "affectedPositionIds": ["7f8e9d-position-page-id"],
+      "inferredDelta": "position-sharpened",
+      "status": "pending"
+    },
+    {
+      "id": "5e6f7a8b-event-approve",
+      "createdAt": "2026-07-06T18:30:45.000Z",
+      "source": "command_center",
+      "objectType": "draft",
+      "objectId": "draft-page-id-1",
+      "platform": "linkedin",
+      "topic": "Why portability beats permanence",
+      "action": "approve",
+      "rawUserText": "",
+      "previousText": "",
+      "newText": "",
+      "affectedPositionIds": [],
+      "inferredDelta": "answer-recorded",
+      "status": "accepted"
+    }
+  ],
+  "proposals": {
+    "pending": [
+      {
+        "id": "proposal-page-id-1",
+        "createdAt": "2026-07-06T14:02:12.000Z",
+        "updatedAt": "2026-07-06T14:02:12.000Z",
+        "sourceEventIds": ["1a2b3c4d-event-sharpen"],
+        "affectedPositionId": "7f8e9d-position-page-id",
+        "topic": "Unsolicited investor calls",
+        "currentPositionText": "Take unsolicited investor calls\nBasis: ...",
+        "proposedPositionText": "Only if a mutual intro vouches for them first.",
+        "reason": "Isaac's own words from a SHARPEN verdict on the weekly survey",
+        "evidenceSummary": "sharpen · event 1a2b3c4d-event-sharpen · 2026-07-06T14:02:11.000Z",
+        "confidence": "medium",
+        "status": "pending"
+      }
+    ],
+    "accepted": []
+  },
+  "drafts": { "pendingReview": 3 },
+  "publisher": { "mode": "manual" },
+  "warnings": []
+}
