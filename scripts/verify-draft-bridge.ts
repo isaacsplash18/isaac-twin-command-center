@@ -123,19 +123,31 @@ async function main() {
     console.log("  (this is expected pre-migration; run `npm run migrate` to clear it)");
   }
 
-  console.log("\nNotion round-trip:");
-  if (typeof created.id === "string" && created.id) {
-    const page = await getPage(created.id);
-    assert("Notion Status is Draft", readStatus(page) === "Draft");
-    assert("Notion title matches", readTitle(page) === title);
-    const roundTrippedBody = await readBody(created.id);
-    assert("Notion body paragraphs round-trip", roundTrippedBody === bodyText);
-
-    console.log("\nCleanup:");
-    await notionFetch(`/pages/${created.id}`, { method: "PATCH", body: JSON.stringify({ archived: true }) });
-    console.log(`  archived test page ${created.id}`);
-  } else {
-    console.log("  (skipped — no page id returned)");
+  // Track the created page so it is archived even if an assertion or network
+  // call below throws midway (mirrors verify-telegram-decisions.ts) — a stray
+  // Status:Draft X page would otherwise surface in the real approval queue.
+  const createdId: string | null = typeof created.id === "string" && created.id ? created.id : null;
+  try {
+    console.log("\nNotion round-trip:");
+    if (createdId) {
+      const page = await getPage(createdId);
+      assert("Notion Status is Draft", readStatus(page) === "Draft");
+      assert("Notion title matches", readTitle(page) === title);
+      const roundTrippedBody = await readBody(createdId);
+      assert("Notion body paragraphs round-trip", roundTrippedBody === bodyText);
+    } else {
+      console.log("  (skipped — no page id returned)");
+    }
+  } finally {
+    if (createdId) {
+      console.log("\nCleanup:");
+      try {
+        await notionFetch(`/pages/${createdId}`, { method: "PATCH", body: JSON.stringify({ archived: true }) });
+        console.log(`  archived test page ${createdId}`);
+      } catch (err) {
+        console.log(`  WARN — could not archive ${createdId}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
   }
 
   console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILURE(S)`}`);

@@ -63,10 +63,22 @@ export async function GET(req: NextRequest) {
       warnings.push("DS_PROPOSALS not configured — proposals.pending/accepted are empty");
     }
 
+    // Each lane degrades independently: a transient Notion error on a
+    // *configured* lane returns an empty result + a warning rather than 500ing
+    // the whole export (the documented "degrades gracefully" contract).
     const [events, pending, accepted, pipelineEvents24h] = await Promise.all([
-      queryCalibrationEvents({ sinceIso: since, limit }),
-      queryProposals({ status: "pending", limit: 100 }),
-      queryProposals({ status: "accepted", limit: 100 }),
+      queryCalibrationEvents({ sinceIso: since, limit }).catch((err) => {
+        warnings.push(`calibration events query failed: ${err instanceof Error ? err.message : String(err)}`);
+        return [];
+      }),
+      queryProposals({ status: "pending", limit: 100 }).catch((err) => {
+        warnings.push(`pending proposals query failed: ${err instanceof Error ? err.message : String(err)}`);
+        return [];
+      }),
+      queryProposals({ status: "accepted", limit: 100 }).catch((err) => {
+        warnings.push(`accepted proposals query failed: ${err instanceof Error ? err.message : String(err)}`);
+        return [];
+      }),
       // Publish failures in the last 24h, from the Pipeline Events KPI log
       // (Phase 10 — same source as the dashboard's failure banner).
       queryEvents(new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()).catch(() => []),

@@ -138,6 +138,9 @@ Exit codes
        TELEGRAM_CHAT_ID_ALLOWLIST) for a real, non-fixture run.
     3  The --fixture file failed structural validation. Nothing was written.
     4  A network error, timeout, malformed JSON, or unexpected exception.
+    5  --fixture was passed without --dry-run. Fixtures are test-only and must
+       never drive real sends/POSTs/state-writes, so this pairing is refused
+       before anything happens.
 """
 
 from __future__ import annotations
@@ -256,7 +259,22 @@ def load_state(path: Path) -> dict:
 
 def save_state(path: Path, state: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    payload = json.dumps(state, indent=2, sort_keys=True) + "\n"
+    # Atomic write: serialise to a sibling temp file in the same directory,
+    # then os.replace() it onto the target. os.replace is atomic on the same
+    # filesystem, so a crash mid-write can never leave truncated JSON that
+    # load_state() would silently reset to default_state() -- which would
+    # wipe sent/msgIndex/updateCursor and cause duplicate sends, lost reply
+    # mapping, and a replayed getUpdates cursor.
+    tmp_path = path.with_name(path.name + f".tmp.{os.getpid()}")
+    try:
+        tmp_path.write_text(payload, encoding="utf-8")
+        os.replace(tmp_path, path)
+    finally:
+        try:
+            tmp_path.unlink()
+        except FileNotFoundError:
+            pass
 
 
 # --------------------------------------------------------------------------
@@ -913,6 +931,13 @@ def run(argv) -> int:
     getupdates_timeout = min(poll_seconds, GETUPDATES_LONGPOLL_TIMEOUT_CAP) if poll_seconds > 0 else 0
 
     fixture_data = None
+    if args.fixture and not args.dry_run:
+        # Fixtures are test-only. Without --dry-run the write side would run
+        # for real: sending Telegram messages, POSTing decisions, and
+        # advancing the real state file (updateCursor -> fixture ids, injected
+        # retries). Refuse the pairing before anything happens.
+        eprint("--fixture requires --dry-run (fixtures are test-only and must not drive real sends/POSTs/state-writes)")
+        return 5
     if args.fixture:
         fixture_data = read_fixture(args.fixture)
         fixture_errors = validate_fixture(fixture_data)

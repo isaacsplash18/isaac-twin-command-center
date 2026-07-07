@@ -49,40 +49,48 @@ async function main() {
   }
   console.log(`  created page id: ${created.id}\n`);
 
-  console.log("Reading back via queryCalibrationEvents()...");
-  const events = await queryCalibrationEvents({ limit: 25 });
-  const found = events.find((e) => e.id === created.id);
-
   let failures = 0;
   const assert = (label: string, cond: boolean) => {
     console.log(`  ${cond ? "PASS" : "FAIL"} — ${label}`);
     if (!cond) failures++;
   };
 
-  assert("event found in query results", !!found);
-  if (found) {
-    assert("action round-trips", found.action === testInput.action);
-    assert("objectType round-trips", found.objectType === testInput.objectType);
-    assert("objectId round-trips", found.objectId === testInput.objectId);
-    assert("topic round-trips", found.topic === testInput.topic);
-    assert("rawUserText round-trips", found.rawUserText === testInput.rawUserText);
-    assert("previousText round-trips", found.previousText === testInput.previousText);
-    assert("newText round-trips", found.newText === testInput.newText);
-    assert(
-      "affectedPositionIds round-trips",
-      JSON.stringify(found.affectedPositionIds) === JSON.stringify(testInput.affectedPositionIds)
-    );
-    assert("inferredDelta round-trips", found.inferredDelta === testInput.inferredDelta);
-    assert("status defaults to pending", found.status === "pending");
-    assert("createdAt is a valid ISO timestamp", !Number.isNaN(Date.parse(found.createdAt)));
-  }
+  // Archive the test event even if the read-back or an assertion throws
+  // midway (matches verify-telegram-decisions.ts).
+  try {
+    console.log("Reading back via queryCalibrationEvents()...");
+    const events = await queryCalibrationEvents({ limit: 25 });
+    const found = events.find((e) => e.id === created.id);
 
-  console.log("\nArchiving test page (cleanup)...");
-  await notionFetch(`/pages/${created.id}`, {
-    method: "PATCH",
-    body: JSON.stringify({ archived: true }),
-  });
-  console.log("  done.");
+    assert("event found in query results", !!found);
+    if (found) {
+      assert("action round-trips", found.action === testInput.action);
+      assert("objectType round-trips", found.objectType === testInput.objectType);
+      assert("objectId round-trips", found.objectId === testInput.objectId);
+      assert("topic round-trips", found.topic === testInput.topic);
+      assert("rawUserText round-trips", found.rawUserText === testInput.rawUserText);
+      assert("previousText round-trips", found.previousText === testInput.previousText);
+      assert("newText round-trips", found.newText === testInput.newText);
+      assert(
+        "affectedPositionIds round-trips",
+        JSON.stringify(found.affectedPositionIds) === JSON.stringify(testInput.affectedPositionIds)
+      );
+      assert("inferredDelta round-trips", found.inferredDelta === testInput.inferredDelta);
+      assert("status defaults to pending", found.status === "pending");
+      assert("createdAt is a valid ISO timestamp", !Number.isNaN(Date.parse(found.createdAt)));
+    }
+  } finally {
+    console.log("\nArchiving test page (cleanup)...");
+    try {
+      await notionFetch(`/pages/${created.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ archived: true }),
+      });
+      console.log("  done.");
+    } catch (err) {
+      console.log(`  WARN — could not archive ${created.id}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 
   console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILURE(S)`}`);
   process.exit(failures === 0 ? 0 : 1);

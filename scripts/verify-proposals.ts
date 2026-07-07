@@ -88,67 +88,81 @@ async function main() {
   const schema = await getDataSourceSchema(ds);
   const titleProp = titlePropertyName(schema);
   const marker = `VERIFY-SCRIPT-${Date.now()}`;
-  const created = await notionFetch(`/pages`, {
-    method: "POST",
-    body: JSON.stringify({
-      parent: { type: "data_source_id", data_source_id: ds },
-      properties: {
-        [titleProp]: { title: [{ type: "text", text: { content: marker } }] },
-        "Affected Position ID": richTextValue(`verify-pos-${Date.now()}`),
-        Topic: richTextValue(marker),
-        "Current Position Text": richTextValue("current text"),
-        "Proposed Position Text": richTextValue("proposed text"),
-        Reason: richTextValue("verification"),
-        "Evidence Summary": richTextValue("verify round-trip"),
-        Confidence: { select: { name: "low" } },
-        Status: { select: { name: "pending" } },
-      },
-    }),
-  });
-  console.log(`  created proposal id: ${created.id}`);
 
-  const pending = await queryProposals({ status: "pending", limit: 100 });
-  const found = pending.find((p) => p.id === created.id);
-  assert("queryProposals(pending) finds it", !!found);
-  if (found) {
-    assert("topic round-trips", found.topic === marker);
-    assert("confidence round-trips", found.confidence === "low");
-    assert("status is pending", found.status === "pending");
-    assert("createdAt is valid ISO", !Number.isNaN(Date.parse(found.createdAt)));
-    assert("updatedAt is valid ISO", !Number.isNaN(Date.parse(found.updatedAt)));
-  }
+  // Archive every proposal page we create, even if an assertion/network call
+  // below throws midway (writes to a log DB — lower harm than the draft
+  // bridge, but the same unguarded-cleanup pattern applies).
+  const createdProposalIds: string[] = [];
+  try {
+    const created = await notionFetch(`/pages`, {
+      method: "POST",
+      body: JSON.stringify({
+        parent: { type: "data_source_id", data_source_id: ds },
+        properties: {
+          [titleProp]: { title: [{ type: "text", text: { content: marker } }] },
+          "Affected Position ID": richTextValue(`verify-pos-${Date.now()}`),
+          Topic: richTextValue(marker),
+          "Current Position Text": richTextValue("current text"),
+          "Proposed Position Text": richTextValue("proposed text"),
+          Reason: richTextValue("verification"),
+          "Evidence Summary": richTextValue("verify round-trip"),
+          Confidence: { select: { name: "low" } },
+          Status: { select: { name: "pending" } },
+        },
+      }),
+    });
+    createdProposalIds.push(created.id);
+    console.log(`  created proposal id: ${created.id}`);
 
-  const accepted = await setProposalStatus(created.id, "accepted");
-  assert("setProposalStatus returns accepted", accepted.status === "accepted");
-  const reread = await getProposal(created.id);
-  assert("re-read confirms accepted", reread.status === "accepted");
-
-  console.log("  archiving direct proposal (cleanup)...");
-  await notionFetch(`/pages/${created.id}`, { method: "PATCH", body: JSON.stringify({ archived: true }) });
-
-  // --- Optional end-to-end generation against a real position ----------------
-  const posArgIdx = process.argv.indexOf("--position-id");
-  const positionId = posArgIdx >= 0 ? process.argv[posArgIdx + 1] : undefined;
-  if (positionId) {
-    console.log(`\nEnd-to-end generation against position ${positionId}:`);
-    const gen = await maybeCreateProposalFromEvent(
-      makeEvent({ action: "sharpen", affectedPositionIds: [positionId], rawUserText: "E2E sharpened take." })
-    );
-    assert("generator created a proposal", !!gen);
-    if (gen) {
-      assert("proposed text is Isaac's verbatim words", gen.proposedPositionText === "E2E sharpened take.");
-      assert("confidence is medium (sharpen)", gen.confidence === "medium");
-      assert("affectedPositionId matches", gen.affectedPositionId === positionId);
-      assert("status is pending", gen.status === "pending");
-      const dup = await maybeCreateProposalFromEvent(
-        makeEvent({ action: "sharpen", affectedPositionIds: [positionId], rawUserText: "second take." })
-      );
-      assert("idempotency: second proposal for same pending position → null", dup === null);
-      console.log("  archiving generated proposal (cleanup)...");
-      await notionFetch(`/pages/${gen.id}`, { method: "PATCH", body: JSON.stringify({ archived: true }) });
+    const pending = await queryProposals({ status: "pending", limit: 100 });
+    const found = pending.find((p) => p.id === created.id);
+    assert("queryProposals(pending) finds it", !!found);
+    if (found) {
+      assert("topic round-trips", found.topic === marker);
+      assert("confidence round-trips", found.confidence === "low");
+      assert("status is pending", found.status === "pending");
+      assert("createdAt is valid ISO", !Number.isNaN(Date.parse(found.createdAt)));
+      assert("updatedAt is valid ISO", !Number.isNaN(Date.parse(found.updatedAt)));
     }
-  } else {
-    console.log("\n(Skipping end-to-end generation — pass --position-id <id> to exercise it.)");
+
+    const accepted = await setProposalStatus(created.id, "accepted");
+    assert("setProposalStatus returns accepted", accepted.status === "accepted");
+    const reread = await getProposal(created.id);
+    assert("re-read confirms accepted", reread.status === "accepted");
+
+    // --- Optional end-to-end generation against a real position --------------
+    const posArgIdx = process.argv.indexOf("--position-id");
+    const positionId = posArgIdx >= 0 ? process.argv[posArgIdx + 1] : undefined;
+    if (positionId) {
+      console.log(`\nEnd-to-end generation against position ${positionId}:`);
+      const gen = await maybeCreateProposalFromEvent(
+        makeEvent({ action: "sharpen", affectedPositionIds: [positionId], rawUserText: "E2E sharpened take." })
+      );
+      assert("generator created a proposal", !!gen);
+      if (gen) {
+        createdProposalIds.push(gen.id);
+        assert("proposed text is Isaac's verbatim words", gen.proposedPositionText === "E2E sharpened take.");
+        assert("confidence is medium (sharpen)", gen.confidence === "medium");
+        assert("affectedPositionId matches", gen.affectedPositionId === positionId);
+        assert("status is pending", gen.status === "pending");
+        const dup = await maybeCreateProposalFromEvent(
+          makeEvent({ action: "sharpen", affectedPositionIds: [positionId], rawUserText: "second take." })
+        );
+        assert("idempotency: second proposal for same pending position → null", dup === null);
+      }
+    } else {
+      console.log("\n(Skipping end-to-end generation — pass --position-id <id> to exercise it.)");
+    }
+  } finally {
+    console.log("\nCleanup:");
+    for (const id of createdProposalIds) {
+      try {
+        await notionFetch(`/pages/${id}`, { method: "PATCH", body: JSON.stringify({ archived: true }) });
+        console.log(`  archived proposal ${id}`);
+      } catch (err) {
+        console.log(`  WARN — could not archive ${id}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
   }
 
   console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILURE(S)`}`);

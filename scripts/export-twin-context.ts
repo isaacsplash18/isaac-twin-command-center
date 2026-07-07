@@ -649,27 +649,59 @@ async function main() {
 
   console.log(`\n=== Writing ${outputs.length} files to ${OUT_ROOT} ===\n`);
 
+  // Files whose existing copy could NOT be backed up — never overwritten.
+  const skippedForBackup = new Set<string>();
   if (!DRY_RUN) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const backupDir = path.join(OUT_ROOT, ".export-backups", timestamp);
     let backedUp = 0;
     for (const o of outputs) {
       const dest = path.join(OUT_ROOT, o.relPath);
+      let exists = true;
       try {
         await stat(dest);
+      } catch (err) {
+        // ONLY a genuine "file not there" (ENOENT) means nothing to back up.
+        // Any other stat error is a real failure — do not overwrite unbacked.
+        if ((err as NodeJS.ErrnoException)?.code === "ENOENT") {
+          exists = false;
+        } else {
+          skippedForBackup.add(o.relPath);
+          console.error(
+            `  BACKUP FAILED (stat) — ${o.relPath}: ${err instanceof Error ? err.message : String(err)} — will NOT overwrite`
+          );
+          continue;
+        }
+      }
+      if (!exists) continue; // nothing to back up; the write loop creates it fresh
+      try {
         await mkdir(path.dirname(path.join(backupDir, o.relPath)), { recursive: true });
         await cp(dest, path.join(backupDir, o.relPath));
         backedUp++;
-      } catch {
-        // File doesn't exist yet — nothing to back up.
+      } catch (err) {
+        // The file exists but could not be copied — never overwrite a
+        // canonical file without a backup. Skip its write and report it.
+        skippedForBackup.add(o.relPath);
+        console.error(
+          `  BACKUP FAILED (cp) — ${o.relPath}: ${err instanceof Error ? err.message : String(err)} — will NOT overwrite`
+        );
       }
     }
     if (backedUp > 0) {
       console.log(`Backed up ${backedUp} existing file(s) to ${backupDir}\n`);
     }
+    if (skippedForBackup.size > 0) {
+      console.error(`${skippedForBackup.size} file(s) could not be backed up and will NOT be overwritten:`);
+      for (const rel of skippedForBackup) console.error(`  - ${rel}`);
+      console.error("");
+    }
   }
 
   for (const o of outputs) {
+    if (skippedForBackup.has(o.relPath)) {
+      console.log(`  SKIPPED (backup failed) ${o.relPath}`);
+      continue;
+    }
     const dest = path.join(OUT_ROOT, o.relPath);
     await mkdir(path.dirname(dest), { recursive: true });
     await writeFile(dest, o.content, "utf8");
@@ -684,6 +716,10 @@ async function main() {
   let failures = 0;
   let stubCount = 0;
   for (const o of outputs) {
+    if (skippedForBackup.has(o.relPath)) {
+      console.log(`  SKIP — ${o.relPath} (not written; existing file could not be backed up)`);
+      continue;
+    }
     const dest = path.join(OUT_ROOT, o.relPath);
     const buf = await readFile(dest, "utf8");
     const exists = buf.length > 0;
@@ -704,11 +740,20 @@ async function main() {
   }
 
   console.log(
-    `\n${outputs.length} files total, ${stubCount} stub(s), ${outputs.length - stubCount} real export(s), ${failures} failure(s).`
+    `\n${outputs.length} files total, ${stubCount} stub(s), ${outputs.length - stubCount} real export(s), ${failures} failure(s)${
+      skippedForBackup.size > 0 ? `, ${skippedForBackup.size} skipped (backup failed)` : ""
+    }.`
   );
 
-  if (failures > 0) {
-    console.error("\nVALIDATION FAILED — a non-stub file came out empty or malformed.");
+  if (failures > 0 || skippedForBackup.size > 0) {
+    if (skippedForBackup.size > 0) {
+      console.error(
+        `\n${skippedForBackup.size} file(s) were NOT written because their existing copy could not be backed up.`
+      );
+    }
+    if (failures > 0) {
+      console.error("\nVALIDATION FAILED — a non-stub file came out empty or malformed.");
+    }
     process.exit(1);
   }
   console.log("\nValidation passed (stubs are allowed — they are honest).");

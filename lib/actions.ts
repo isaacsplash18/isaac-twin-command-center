@@ -72,12 +72,15 @@ export async function approveItem(pageId: string, source: CalibrationSource = "c
     }
   }
 
+  // Non-fatal: the status flip already committed, so a transient Pipeline
+  // Events write failure must not 500 an applied action (a retry would hit
+  // the `!== "Draft"` guard). Same discipline as logCalibrationEvent.
   await logEvent({
     event: edited ? "Approved-with-edits" : "Approved",
     platform: PLATFORM_EVENT_NAMES[p.key],
     itemUrl: page.url,
     diff: edited && original ? buildDiff(original, body) : undefined,
-  });
+  }).catch((err) => console.warn("logEvent (Approved) failed — action already applied:", err));
 
   await logCalibrationEvent({
     source,
@@ -99,7 +102,11 @@ export async function rejectItem(pageId: string, source: CalibrationSource = "co
   if (status !== "Draft") throw new ActionError(`Cannot reject an item with status "${status ?? "unknown"}"`);
   const dsId = process.env[p.dsEnv]!;
   await updatePage(pageId, await buildStatusUpdate(dsId, "Rejected"));
-  await logEvent({ event: "Rejected", platform: PLATFORM_EVENT_NAMES[p.key], itemUrl: page.url });
+  // Non-fatal: status already flipped; don't 500 an applied reject on a
+  // transient Pipeline Events failure (matches logCalibrationEvent).
+  await logEvent({ event: "Rejected", platform: PLATFORM_EVENT_NAMES[p.key], itemUrl: page.url }).catch((err) =>
+    console.warn("logEvent (Rejected) failed — action already applied:", err)
+  );
   await logCalibrationEvent({
     source,
     action: "reject",
@@ -121,17 +128,47 @@ export async function editItem(pageId: string, newText: string, source: Calibrat
   // Snapshot the pre-edit body once, so the Edit Ledger diff has a baseline.
   const existingOriginal = readRichTextProp(page, "Original Draft");
   const currentBody = await readItemBody(page, p);
-  const updates: Record<string, unknown> = { "Edited Before Approval": { checkbox: true } };
+  const snapshotUpdates: Record<string, unknown> = { "Edited Before Approval": { checkbox: true } };
   if (!existingOriginal) {
-    updates["Original Draft"] = richTextValue(currentBody || newText);
+    snapshotUpdates["Original Draft"] = richTextValue(currentBody || newText);
   }
+  // Matches the Notion "unknown property" errors raised by a pre-migration DB
+  // lacking Original Draft / Edited Before Approval.
+  const snapshotPropMissing = /Original Draft|Edited Before Approval|property that does not exist|not a property/i;
+
   if (p.bodyProp) {
-    // Body lives in a rich-text property (IG Story Copy / Caption)
-    updates[p.bodyProp] = richTextValue(newText);
+    // Body lives in a rich-text property (IG Story Copy / Caption) — the body
+    // prop and the snapshot/flag land in the SAME updatePage as before.
+    const updates = { ...snapshotUpdates, [p.bodyProp]: richTextValue(newText) };
+    try {
+      await updatePage(pageId, updates as never);
+    } catch (err) {
+      // Pre-migration DBs lack the snapshot props — persist the body alone
+      // rather than blocking the edit (mirrors approveItem's fallback).
+      if (err instanceof Error && snapshotPropMissing.test(err.message)) {
+        console.warn("Original Draft / Edited Before Approval missing (run npm run migrate) — editing body only");
+        await updatePage(pageId, { [p.bodyProp]: richTextValue(newText) } as never);
+      } else {
+        throw err;
+      }
+    }
   } else {
+    // Block body (X / LinkedIn): persist the snapshot + flag FIRST, then
+    // mutate the body, so a failure between them can never leave the body
+    // changed with the true original never saved.
+    try {
+      await updatePage(pageId, snapshotUpdates as never);
+    } catch (err) {
+      // Pre-migration DBs lack the snapshot props — warn and proceed to the
+      // body change rather than mutating the body then throwing (the old bug).
+      if (err instanceof Error && snapshotPropMissing.test(err.message)) {
+        console.warn("Original Draft / Edited Before Approval missing (run npm run migrate) — editing body only");
+      } else {
+        throw err;
+      }
+    }
     await writeBody(pageId, newText);
   }
-  await updatePage(pageId, updates as never);
   await logCalibrationEvent({
     source,
     action: "edit",
@@ -153,12 +190,14 @@ export async function markPostedItem(pageId: string) {
   if (status !== "Approved") throw new ActionError(`Cannot mark-posted an item with status "${status ?? "unknown"}"`);
   const dsId = process.env[p.dsEnv]!;
   await updatePage(pageId, await buildStatusUpdate(dsId, "Posted"));
+  // Non-fatal: status already flipped to Posted; don't 500 an applied action
+  // on a transient Pipeline Events failure (matches logCalibrationEvent).
   await logEvent({
     event: "Posted",
     platform: PLATFORM_EVENT_NAMES[p.key],
     itemUrl: page.url,
     notes: "Posted manually",
-  });
+  }).catch((err) => console.warn("logEvent (Posted) failed — action already applied:", err));
   return { ok: true };
 }
 

@@ -13,7 +13,7 @@ import { PLATFORMS, PLATFORM_EVENT_NAMES, PlatformConfig, dataSourceId } from ".
 import { itemsWithStatus, buildStatusUpdate, ContentItem } from "./items";
 import { getPage, logEvent, queryDataSource, readBody, readDateProp, readRichTextProp, readStatus, richTextValue, updatePage } from "./notion";
 import { nextFreeSlot, SchedulablePlatform } from "./scheduling";
-import { createScheduledDraft, getDraftState } from "./typefully";
+import { createScheduledDraft, deleteDraft, getDraftState } from "./typefully";
 import { platformFromPage } from "./items";
 
 export interface PublishResult {
@@ -41,11 +41,36 @@ async function scheduleOne(
     body,
     publishAtIso: slot,
   });
-  await updatePage(item.id, {
-    ...(await buildStatusUpdate(dataSourceId(p), "Queued")),
-    "Typefully ID": richTextValue(draft.id),
-    "Scheduled At": { date: { start: slot } },
-  });
+  try {
+    await updatePage(item.id, {
+      ...(await buildStatusUpdate(dataSourceId(p), "Queued")),
+      "Typefully ID": richTextValue(draft.id),
+      "Scheduled At": { date: { start: slot } },
+    });
+  } catch (err) {
+    // The Typefully draft was created but Notion never recorded its ID, so
+    // the idempotency guard (runPublisher skips items that already carry a
+    // Typefully ID) can't see it — the next run would create a SECOND draft
+    // and double-schedule the post. Roll the Typefully side back so the item
+    // stays cleanly Approved and can be retried.
+    try {
+      await deleteDraft(draft.id);
+    } catch (rollbackErr) {
+      // Rollback failed too: the draft is now orphaned in Typefully with no
+      // Notion pointer. Record its id in a Publish-failed event so the
+      // reconciler/human can find and remove it, then rethrow.
+      const notionMsg = err instanceof Error ? err.message : String(err);
+      const rollbackMsg = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
+      await logEvent({
+        event: "Publish-failed",
+        platform: PLATFORM_EVENT_NAMES[p.key],
+        itemUrl: item.notionUrl,
+        notes: `ORPHANED Typefully draft ${draft.id} — Notion write failed after create and rollback (deleteDraft) also failed; remove it manually. Notion error: ${notionMsg}; rollback error: ${rollbackMsg}`,
+      }).catch(() => {});
+      throw err;
+    }
+    throw err;
+  }
   await logEvent({
     event: "Queued",
     platform: PLATFORM_EVENT_NAMES[p.key],

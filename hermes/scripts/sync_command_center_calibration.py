@@ -43,6 +43,10 @@ Exit codes:
     2  HERMES_API_TOKEN is not set (and this was not --dry-run / --fixture).
     3  The export response failed validation. Nothing was written.
     4  A network error, timeout, malformed JSON, or fixture-read error.
+    5  --fixture was passed without --dry-run. Fixtures are test-only and must
+       never drive real report/state writes (a fixture's generatedAt would
+       corrupt the next real run's window), so this pairing is refused before
+       anything happens.
 """
 
 from __future__ import annotations
@@ -515,6 +519,14 @@ def run(argv) -> int:
     args = parse_args(argv)
     now = datetime.now(timezone.utc)
 
+    if args.fixture and not args.dry_run:
+        # Fixtures are test-only. Without --dry-run the write side runs for
+        # real: a report is written into inbox/calibration/ and state.since is
+        # set to the fixture's generatedAt (a fake/old/future date), which
+        # then corrupts the next real run's window. Refuse the pairing.
+        eprint("--fixture requires --dry-run (fixtures are test-only and must not drive real report/state writes)")
+        return 5
+
     twin_root = resolve_twin_root()
     state = load_state(state_path(twin_root))
     since_used = state.get("since") or default_since()
@@ -542,13 +554,35 @@ def run(argv) -> int:
             eprint(f"  - {error}")
         return 3
 
+    # Dedupe by event id across runs. The next run queries `?since=<watermark>`
+    # (on_or_after), so boundary events with createdAt == watermark come back
+    # in the overlap window; `seenIds` (the ids we recorded AT the previous
+    # watermark) lets us drop them so they are never double-reported.
+    since_floor = parse_iso(since_used)
+    seen_ids = set(state.get("seenIds") or [])
     new_events = [
-        event for event in data["events"] if parse_iso(event["createdAt"]) >= parse_iso(since_used)
+        event
+        for event in data["events"]
+        if parse_iso(event["createdAt"]) >= since_floor and event["id"] not in seen_ids
     ]
 
     if args.dry_run:
         print(render_report(data, new_events, since_used, now))
         return 0
+
+    # Watermark = max createdAt actually returned (NOT generatedAt, which is
+    # set after the events list is snapshotted, so events created in that gap
+    # would be skipped forever). Fall back to the previous watermark when no
+    # events came back, and preserve the prior seenIds so pending boundary
+    # events still dedupe on a future run.
+    event_times = [(parse_iso(e["createdAt"]), e) for e in data["events"]]
+    if event_times:
+        max_dt = max(dt for dt, _ in event_times)
+        new_watermark = max(event_times, key=lambda pair: pair[0])[1]["createdAt"]
+        new_seen_ids = sorted({e["id"] for dt, e in event_times if dt == max_dt})
+    else:
+        new_watermark = since_used
+        new_seen_ids = sorted(seen_ids)
 
     standing_hash = compute_standing_hash(data)
     stored_hash = state.get("reportHash")
@@ -562,7 +596,7 @@ def run(argv) -> int:
 
     save_state(
         state_path(twin_root),
-        {"since": data["generatedAt"], "reportHash": standing_hash},
+        {"since": new_watermark, "reportHash": standing_hash, "seenIds": new_seen_ids},
     )
 
     try:

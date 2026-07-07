@@ -219,10 +219,13 @@ export async function writeBody(pageId: string, text: string): Promise<void> {
     .split(/\n{2,}/)
     .map((p) => p.trim())
     .filter(Boolean)
+    // Chunk each paragraph into multiple ≤2000-char rich_text items within one
+    // paragraph block (richTextValue does the chunking) — a single paragraph
+    // longer than 2000 chars must not be truncated.
     .map((p) => ({
       object: "block",
       type: "paragraph",
-      paragraph: { rich_text: [{ type: "text", text: { content: p.slice(0, 2000) } }] },
+      paragraph: richTextValue(p),
     }));
   // Append first, then delete old paragraphs, so a mid-operation failure
   // never leaves the page empty.
