@@ -375,6 +375,231 @@ http://localhost:3000`):
   separate draft pages. Idempotency (e.g. a client-supplied request id) is not
   implemented in v1.
 
+## Draft read (pending) — GET /api/hermes/drafts?status=pending
+
+*Phase 9 — docs/telegram-approval-bridge.md §2 (N2). The read path that lets a
+headless worker (the Telegram approval bridge) fetch pending drafts **with their
+bodies** so it can render an approval message. `GET` on the same route file as
+the Phase 7 `POST`.*
+
+### Purpose
+
+`GET /api/hermes/export` returns only a **count** of pending drafts
+(`drafts.pendingReview`), and draft *bodies* are otherwise only available on the
+session-authed `GET /api/queue` — which a headless Mac-mini worker can't call.
+This machine-lane read returns the pending-review drafts themselves, so the
+bridge can message drafts it did **not** author (e.g. a Notion-agent-written
+draft, whose body it never held). Read-only — nothing here mutates Notion.
+
+### Auth
+
+Same machine lane as `export` / the `POST`: send
+`Authorization: Bearer ${HERMES_API_TOKEN}`. Missing/wrong header, or
+`HERMES_API_TOKEN` unset server-side → `401`.
+
+### Query params
+
+| Param | Type | Default | Notes |
+|---|---|---|---|
+| `status` | string | `pending` | Only `pending` is supported in v1 (the drafts waiting in the approval queue, i.e. Notion `Status: Draft`). Any other value → `400`. |
+
+### Example request
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $HERMES_API_TOKEN" \
+  "https://isaac-twin-command-center.vercel.app/api/hermes/drafts?status=pending"
+```
+
+Local dev:
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $HERMES_API_TOKEN" \
+  "http://localhost:3000/api/hermes/drafts?status=pending"
+```
+
+### Example response (200)
+
+A bare JSON array, newest first (Notion `created_time` descending), across all
+four content DBs:
+
+```jsonc
+[
+  {
+    "pageId": "2a3b4c5d-...",
+    "platform": "linkedin",          // app platform key: x | linkedin | ig-story | ig-carousel
+    "title": "Why I stopped taking cold investor calls",
+    "body": "Most cold investor outreach is a templated deck with my name swapped in...",
+    "humanizer": "passed",           // from the Humanizer select prop ("" if pre-migration)
+    "createdBy": "hermes",           // from the Created By select prop ("" if pre-migration)
+    "createdAt": "2026-07-07T09:00:00.000Z"
+  }
+]
+```
+
+### Field notes
+
+| Field | Source |
+|---|---|
+| `pageId` | Notion page id. Pass this back as `pageId` to `POST /api/hermes/decisions`. |
+| `platform` | The app's platform key (`x`, `linkedin`, `ig-story`, `ig-carousel`). |
+| `title` | The DB's title property (`Hook` for X/LinkedIn). |
+| `body` | Resolved per platform via `readItemBody` (page content for X/LinkedIn; `IG Story Copy` / `Caption` for the IG DBs). |
+| `humanizer` | The `Humanizer` select prop (`passed`/`failed`/`unknown`), or `""` if that DB isn't migrated yet. |
+| `createdBy` | The `Created By` select prop (`hermes`/`agent`/`manual`), or `""` if not migrated. |
+| `createdAt` | Notion `created_time`. |
+
+### Degradation
+
+Per-platform, exactly like `export`: a content DB whose `DS_*` env var is unset,
+or whose `Status` option isn't migrated yet, is **skipped** (logged server-side)
+rather than failing the whole call — you get the drafts from the DBs that *are*
+configured, and an unconfigured lane simply contributes nothing. The response is
+always a valid array (possibly empty).
+
+### Error codes
+
+| Status | Body | Meaning |
+|---|---|---|
+| `200` | draft array (see above) | Success — possibly an empty array. |
+| `400` | `{"error":"<message>"}` | `status` other than `pending`. |
+| `401` | `{"error":"Unauthorised"}` | Missing/wrong `Authorization` header, or `HERMES_API_TOKEN` unset server-side. |
+| `500` | `{"error":"<message>"}` | Unexpected failure. Retry with backoff; not expected in normal operation. |
+
+### Limitations
+
+- `status=pending` is the only supported filter in v1 (maps to Notion
+  `Status: Draft`). No paging cursor — capped at 100 per platform DB, which is
+  far beyond the single-user pending queue in practice.
+- IG Carousel `body` is the `Caption` only; per-slide `Slide Texts` are not
+  included (consistent with the draft *creation* route).
+
+## Decision write-back — POST /api/hermes/decisions
+
+*Phase 9 — docs/telegram-approval-bridge.md §2 (N1), §5, §6. The machine-lane
+write-back path for the Telegram approval bridge: it applies Isaac's
+approve / reject / edit reply by wrapping the **same** `lib/actions.ts`
+lifecycle actions the web UI uses, tagged `source: "telegram"` on the resulting
+CalibrationEvent.*
+
+### Purpose
+
+Turns a Telegram decision into the identical status change + CalibrationEvent
+(+ Pipeline Event) that a click in the Command Center approval queue produces —
+without giving the headless worker a human session cookie. This route **never
+publishes**: it only flips `Draft → Approved` or `Draft → Rejected`, exactly
+like the Approve/Reject buttons in the UI.
+
+### Auth
+
+Same machine lane: `Authorization: Bearer ${HERMES_API_TOKEN}`. Missing/wrong
+header, or `HERMES_API_TOKEN` unset server-side → `401`.
+
+### Request
+
+`POST /api/hermes/decisions`, JSON body:
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `pageId` | string | yes | The Draft page id (from the drafts read, or the `POST /api/hermes/drafts` response). Empty/whitespace-only → `400`. |
+| `action` | `"approve" \| "reject" \| "edit"` | yes | Anything else → `400`. |
+| `editedText` | string | iff `action == "edit"` | Full replacement body. Missing/empty for an `edit` → `400`. Ignored for other actions. |
+| `reason` | string | no (reject only) | Free-text rejection reason. Stored on the CalibrationEvent as `rawUserText`. Absent reason still rejects. |
+| `source` | `"telegram" \| "command_center" \| "hermes"` | no | Recorded on the CalibrationEvent. Defaults to `"telegram"` for this route; an invalid value falls back to `"telegram"`. |
+| `idempotencyKey` | string | no | E.g. `tg:<chat>:<update_id>`. Accepted and **echoed** in the response for the caller's own logs. True dedup in v1 is status-based (see below), not key-based. |
+
+### Per-action behaviour
+
+- **`approve`** → `approveItem(pageId, "telegram")` → `Status: Approved`,
+  `Approved At` set, Pipeline Event `Approved`, CalibrationEvent `approve`
+  (`source: "telegram"`). Never publishes.
+- **`reject`** → `rejectItem(pageId, "telegram", reason)` → `Status: Rejected`,
+  Pipeline Event `Rejected`, CalibrationEvent `reject` with
+  `rawUserText = reason` (empty if none). **Does not** generate a Position
+  proposal — draft rejections carry no affected-Position ids (design §6); the
+  reason is captured for the weekly review.
+- **`edit`** → a single logical **EDIT-APPROVE**:
+  `editItem(pageId, editedText, "telegram")` **then**
+  `approveItem(pageId, "telegram")`. Produces an `edit` CalibrationEvent and an
+  `approve` one; sets `Edited Before Approval`, snapshots the pre-edit body into
+  `Original Draft`, and the approve logs Pipeline Event `Approved-with-edits`.
+  One reply = one decision (design §5).
+
+### Idempotency / the no-op case
+
+`approveItem` / `rejectItem` / `editItem` throw `409` when the page has already
+moved off `Draft`. For the bridge, "someone already decided this" (a duplicate
+Telegram reply, or Isaac decided in the web UI first) is a **success**, so a
+`409` from the wrapped action is translated to a `200` with `noop: true`. This
+makes re-POSTing the same decision replay-safe. Dedup is **status-based** — no
+extra Notion property or migration (design O5); `idempotencyKey` is a log handle
+only.
+
+### Example request
+
+```bash
+# Approve
+curl -s -X POST \
+  -H "Authorization: Bearer $HERMES_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"pageId":"2a3b4c5d-...","action":"approve","source":"telegram","idempotencyKey":"tg:12345:98"}' \
+  "https://isaac-twin-command-center.vercel.app/api/hermes/decisions"
+
+# Reject with a reason
+curl -s -X POST \
+  -H "Authorization: Bearer $HERMES_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"pageId":"2a3b4c5d-...","action":"reject","reason":"Too promotional — off-voice."}' \
+  "http://localhost:3000/api/hermes/decisions"
+
+# Edit (full replacement) then approve, in one call
+curl -s -X POST \
+  -H "Authorization: Bearer $HERMES_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"pageId":"2a3b4c5d-...","action":"edit","editedText":"The whole new body text."}' \
+  "http://localhost:3000/api/hermes/decisions"
+```
+
+### Example responses
+
+```jsonc
+// 200 — decision applied
+{ "ok": true, "pageId": "2a3b4c5d-...", "action": "approve", "status": "Approved",
+  "noop": false, "idempotencyKey": "tg:12345:98" }
+
+// 200 — already decided (idempotent no-op)
+{ "ok": true, "pageId": "2a3b4c5d-...", "action": "approve", "status": "Approved",
+  "noop": true, "note": "already-decided" }
+```
+
+`status` reflects the page's current Notion `Status` (re-read on the no-op
+path). `idempotencyKey` is present only if one was supplied.
+
+### Error codes
+
+| Status | Body | Meaning |
+|---|---|---|
+| `200` | decision JSON (see above) | Applied (`noop:false`) **or** already-decided (`noop:true`). |
+| `400` | `{"error":"<message>"}` | Non-JSON body, missing `pageId`, invalid `action`, `edit` without `editedText`, or a page that doesn't belong to a configured content DB. |
+| `401` | `{"error":"Unauthorised"}` | Missing/wrong `Authorization` header, or `HERMES_API_TOKEN` unset server-side. |
+| `500` | `{"error":"<message>"}` | Unexpected failure (e.g. a genuine Notion API error). Retry with backoff; the status-based no-op makes retries safe. |
+
+### Verification
+
+`scripts/verify-telegram-decisions.ts` (`npm run verify:telegram-decisions --
+--url http://localhost:3000`):
+
+- If `HERMES_API_TOKEN` is unset, prints "machine lane disabled — set
+  HERMES_API_TOKEN" and exits `0`.
+- Otherwise: asserts unauthenticated and wrong-token requests both get `401`;
+  creates throwaway `VERIFY-TG-DECISIONS — safe to delete` drafts and exercises
+  `approve` (→ Notion `Approved`), `reject` with a reason (→ `Rejected`), and
+  `edit` edit-then-approve (→ `Approved` + `Edited Before Approval` true);
+  asserts a re-POSTed decision on an already-decided page returns
+  `200 { noop:true, note:"already-decided" }`; then archives every test page it
+  created. Never touches a real draft.
+
 ## Publisher gating (Phase 10)
 
 The publishing layer predates the calibration system and already satisfies the

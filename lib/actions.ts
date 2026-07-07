@@ -6,7 +6,7 @@
 
 import { PLATFORM_EVENT_NAMES } from "./config";
 import { readItemBody, toContentItem, platformFromPage } from "./items";
-import { CalibrationPlatform, logCalibrationEvent } from "./calibration-events";
+import { CalibrationPlatform, CalibrationSource, logCalibrationEvent } from "./calibration-events";
 import {
   buildStatusUpdate,
   getPage,
@@ -46,7 +46,7 @@ function buildDiff(original: string, approved: string): string {
   return `ORIGINAL\n--------\n${original}\n\nAPPROVED\n--------\n${approved}`;
 }
 
-export async function approveItem(pageId: string) {
+export async function approveItem(pageId: string, source: CalibrationSource = "command_center") {
   const { page, p } = await loadItem(pageId);
   const status = readStatus(page);
   if (status !== "Draft") throw new ActionError(`Cannot approve an item with status "${status ?? "unknown"}"`);
@@ -80,6 +80,7 @@ export async function approveItem(pageId: string) {
   });
 
   await logCalibrationEvent({
+    source,
     action: "approve",
     objectType: "draft",
     objectId: pageId,
@@ -92,7 +93,7 @@ export async function approveItem(pageId: string) {
   return toContentItem(await getPage(pageId), p, false);
 }
 
-export async function rejectItem(pageId: string) {
+export async function rejectItem(pageId: string, source: CalibrationSource = "command_center", reason?: string) {
   const { page, p } = await loadItem(pageId);
   const status = readStatus(page);
   if (status !== "Draft") throw new ActionError(`Cannot reject an item with status "${status ?? "unknown"}"`);
@@ -100,16 +101,18 @@ export async function rejectItem(pageId: string) {
   await updatePage(pageId, await buildStatusUpdate(dsId, "Rejected"));
   await logEvent({ event: "Rejected", platform: PLATFORM_EVENT_NAMES[p.key], itemUrl: page.url });
   await logCalibrationEvent({
+    source,
     action: "reject",
     objectType: "draft",
     objectId: pageId,
     platform: calibrationPlatform(p.key),
     topic: readTitle(page),
+    rawUserText: reason,
   });
   return { ok: true };
 }
 
-export async function editItem(pageId: string, newText: string) {
+export async function editItem(pageId: string, newText: string, source: CalibrationSource = "command_center") {
   if (!newText.trim()) throw new ActionError("Draft body cannot be empty", 400);
   const { page, p } = await loadItem(pageId);
   const status = readStatus(page);
@@ -130,6 +133,7 @@ export async function editItem(pageId: string, newText: string) {
   }
   await updatePage(pageId, updates as never);
   await logCalibrationEvent({
+    source,
     action: "edit",
     objectType: "draft",
     objectId: pageId,
