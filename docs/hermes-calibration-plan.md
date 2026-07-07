@@ -530,3 +530,19 @@ this is safe). Removing `HERMES_API_TOKEN` from Vercel/`.env` alone is enough to
 whole machine lane in one move without any code change — the route fails closed (`401`) whenever
 it's unset. No canonical data is ever touched by this phase (GET-only, read-only), so there is
 nothing to un-apply.
+
+### Phases 6–8, 10, 11 (parallel batch)
+
+Implemented by four parallel sub-agents plus the orchestrator (P10), gated
+together. Full per-phase changelogs live in `docs/changelogs/phase-{6,7,8,10,11}.md`:
+
+- **P6** — Hermes sync worker (`hermes/scripts/sync_command_center_calibration.py`,
+  stdlib-only, idempotent/quiet, exit codes 0/2/3/4, fixture + dry-run modes).
+- **P7** — Draft creation bridge (`POST /api/hermes/drafts`), additive provenance
+  props (Created By / Source Workflow / Humanizer / Source Position IDs) migrated live.
+- **P8** — Telegram approval bridge **design** (`docs/telegram-approval-bridge.md`);
+  implementation (Phase 9) gated on Isaac approving the design. Six open questions inside.
+- **P10** — Publisher gating verified against the brief; `publisher.failures24h`
+  added to the export (additive, version 1); docs section in hermes-integration.md.
+- **P11** — Notion→twin exporter (`scripts/export-twin-context.ts`, dry-run default,
+  discovery-based, 7 real exports + 4 documented stubs in `hermes/export-preview/`).

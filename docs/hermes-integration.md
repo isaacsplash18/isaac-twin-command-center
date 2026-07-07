@@ -225,3 +225,177 @@ http://localhost:3000`):
   existing drafts.
 - No rate limiting on this endpoint (matches the rest of the app — single
   trusted caller, Hermes, expected).
+
+## Draft creation — POST /api/hermes/drafts
+
+*Phase 7 — docs/hermes-calibration-plan.md §4.4. This is the one-way
+Hermes → Command Center write: Hermes (or any other machine caller) creates a
+new draft; a human still approves/edits/rejects it in the existing approval
+queue, exactly as if Isaac had written it himself in Notion.*
+
+### Purpose
+
+Lets Hermes create a pending draft directly in the right content database
+(X / LinkedIn / IG Story / IG Carousel) instead of Isaac hand-pasting Hermes
+output into Notion. The draft lands with `Status: Draft` — the app's existing
+"pending review" state — so it appears in the Command Center approval queue
+with **zero UI changes**. This route **never publishes** and **never sets any
+status other than `Draft`**.
+
+### Auth
+
+Same machine lane as the export endpoint: send
+`Authorization: Bearer ${HERMES_API_TOKEN}`. `/api/hermes/` is already in
+`middleware.ts`'s `PUBLIC_PREFIXES` (added in Phase 5) — no middleware change
+was needed for this route. Missing/wrong header, or `HERMES_API_TOKEN` unset
+server-side → `401`.
+
+### Request
+
+`POST /api/hermes/drafts`, JSON body:
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `platform` | string | yes | `x`, `linkedin`, `ig-story`, `ig-carousel` — or the export schema's snake_case aliases `ig_story` / `ig_carousel` (both are normalized to the same platform). Unknown value → `400`. |
+| `title` | string | yes | Goes into the content DB's title property (`Hook` for X/LinkedIn; the same discovery Notion uses for the other DBs). Empty/whitespace-only → `400`. |
+| `body` | string | yes | Placement depends on platform — see below. Empty/whitespace-only, or over 20,000 characters, → `400`. |
+| `sourcePositionIds` | string[] | no | Notion Position page ids Hermes drafted from. Stored verbatim, comma-joined, in the `Source Position IDs` property (added by this phase's migration — a dedicated property, not folded into `Source Workflow`). |
+| `sourceWorkflow` | string | no | Free text (e.g. a workflow/pack name) stored in the `Source Workflow` rich-text property. |
+| `humanizerStatus` | `"passed" \| "failed" \| "unknown"` | no | Defaults to `"unknown"`. Stored in the `Humanizer` select property. **This is a label Hermes supplies — the humanizer gate itself runs Hermes-side (`humanizer_check.py`); the Command Center only records the result, it does not run or verify the check.** |
+| `createdBy` | `"hermes" \| "agent"` | no | Defaults to `"hermes"`. Stored in the `Created By` select property (which also has a `"manual"` option for human-created drafts, never set by this route). |
+
+### Per-platform body placement
+
+Mirrors the existing read-side convention (`lib/items.ts` `readItemBody`), in
+reverse:
+
+| Platform | Title property | Body placement |
+|---|---|---|
+| `x` | `Hook` | Page content — split on blank lines into paragraph blocks (same chunking as the existing edit path), passed as `children` on page create. |
+| `linkedin` | `Hook` | Page content, same as X. |
+| `ig-story` / `ig_story` | (DB's title property) | `IG Story Copy` rich-text property. |
+| `ig-carousel` / `ig_carousel` | (DB's title property) | `Caption` rich-text property. `Slide Texts` is not written by this route (no per-slide field in the request shape — v1 sends the caption only). |
+
+### Example request
+
+```bash
+curl -s -X POST \
+  -H "Authorization: Bearer $HERMES_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "x",
+    "title": "Why I stopped taking cold investor calls",
+    "body": "Most cold investor outreach is a templated deck with my name swapped in.\n\nI now only take calls with a mutual intro — it filters for signal.",
+    "sourceWorkflow": "packs/workflows/x.md",
+    "sourcePositionIds": ["7f8e9d-position-page-id"],
+    "humanizerStatus": "passed",
+    "createdBy": "hermes"
+  }' \
+  "https://isaac-twin-command-center.vercel.app/api/hermes/drafts"
+```
+
+Local dev:
+
+```bash
+curl -s -X POST \
+  -H "Authorization: Bearer $HERMES_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"platform":"x","title":"Test draft","body":"Body text."}' \
+  "http://localhost:3000/api/hermes/drafts"
+```
+
+### Example response (201)
+
+```jsonc
+{
+  "id": "2a3b4c5d-...",
+  "url": "https://www.notion.so/2a3b4c5d-...",
+  "platform": "x",
+  "status": "Draft",
+  // Non-empty only if the 4 provenance properties (Created By / Source
+  // Workflow / Humanizer / Source Position IDs) aren't migrated onto this
+  // content DB yet — the draft is still created, just without them. Run
+  // `npm run migrate` to clear this.
+  "warnings": []
+}
+```
+
+### Error codes
+
+| Status | Body | Meaning |
+|---|---|---|
+| `201` | draft JSON (see above) | Created — lands in the approval queue as `Status: Draft`. |
+| `400` | `{"error":"<message>"}` | Validation failure: unknown `platform`, missing/empty `title` or `body`, or `body` over 20,000 characters. The message names the specific problem. |
+| `401` | `{"error":"Unauthorised"}` | Missing/wrong `Authorization` header, or `HERMES_API_TOKEN` is unset server-side (machine lane disabled). |
+| `500` | `{"error":"<message>"}` | Unexpected failure (e.g. a genuine Notion API error not covered by the pre-migration fallback). Retry with backoff; not expected in normal operation. |
+
+### Important: this is a queue entry, not a publish
+
+A draft created through this endpoint is **identical in every way** to a
+draft Isaac wrote by hand in Notion: it sits at `Status: Draft`, shows up in
+the Command Center approval queue, and requires an explicit APPROVE (and,
+for X/LinkedIn with Typefully enabled, a subsequent queue/publish step) before
+it goes anywhere near a real platform. **Nothing about this endpoint
+publishes, schedules, or auto-approves anything.** `humanizerStatus` is stored
+as-is for visibility/audit — the Command Center does not re-run or verify the
+humanizer gate; that check happens entirely on the Hermes side.
+
+### Verification
+
+`scripts/verify-draft-bridge.ts` (`npm run verify:draft-bridge -- --url
+http://localhost:3000`):
+
+- If `HERMES_API_TOKEN` is unset, prints "machine lane disabled — set
+  HERMES_API_TOKEN" and exits `0`.
+- Otherwise: asserts an unauthenticated request and a wrong-token request both
+  get `401`; asserts a request with an unknown `platform` and one with an
+  empty `title` both get `400`; creates one throwaway X draft titled
+  `VERIFY-DRAFT-BRIDGE — safe to delete` with a two-paragraph body, asserts
+  `201` plus a well-shaped response, reads the created Notion page back and
+  asserts `Status` is `Draft`, the title matches, and the body round-trips
+  exactly through the paragraph-block split/join — then archives the test
+  page. PASS/FAIL per assertion.
+
+### Limitations
+
+- `sourcePositionIds` is stored as a flat comma-joined string in the
+  `Source Position IDs` rich-text property, not a relation — consistent with
+  the rest of this system's stance on cross-DB relations (Phase 3 §4.1):
+  ids aren't validated against the Positions Library, and a comma inside an id
+  would break the join (Notion page ids never contain commas, so this is safe
+  in practice).
+- IG Carousel drafts created this way only populate `Caption`; `Slide Texts`
+  is left blank (no per-slide field exists in this request shape yet).
+- The four provenance properties are additive Notion schema (this phase's
+  migration). Until `npm run migrate` has been run against a given content
+  DB, drafts are still created successfully, just without `Created By` /
+  `Source Workflow` / `Humanizer` / `Source Position IDs` set — surfaced as a
+  `warnings` entry in the response rather than a hard failure.
+- No de-dup: calling this endpoint twice with the same content creates two
+  separate draft pages. Idempotency (e.g. a client-supplied request id) is not
+  implemented in v1.
+
+## Publisher gating (Phase 10)
+
+The publishing layer predates the calibration system and already satisfies the
+brief's Phase 10 requirements. This section documents the guarantees rather
+than adding new machinery.
+
+### Guarantees, and where they're enforced
+
+| Brief requirement | Implementation |
+|---|---|
+| Never publish without explicit approval | `lib/publisher.ts` `runPublisher()` only queries items with `Status: Approved` — a status that is only ever set by Isaac's Approve action (web UI today; Telegram bridge after Phase 9). There is no code path from `Draft` to Typefully. |
+| Publisher status stored | Notion `Status` select is the state machine. Mapping to the brief's vocabulary: `Approved` = *not_queued*, `Queued` = *queued*, `Posted` = *published*; failures stay `Approved` and log a `Publish-failed` Pipeline Event (= *failed*, retried next cron run). |
+| Publisher URL/id stored | `Typefully ID` and `Scheduled At` props on the content page. |
+| Failures surfaced | Dashboard banner (via `/api/panels`) and, machine-side, `publisher.failures24h` in `GET /api/hermes/export`. |
+| Retry-safe | Idempotency by construction: items already carrying a `Typefully ID` are skipped; cron re-runs never double-schedule. The hourly reconciler (`/api/cron/reconcile`) flags items >2h past their slot exactly once. |
+| No automatic publishing by default | With `TYPEFULLY_API_KEY` unset (current state), every platform runs the manual copy-paste lane; `runPublisher()` iterates zero auto-publish platforms and is a no-op. `publisher.mode` in the export reports `"manual"`. |
+| Missing credentials ⇒ interface + dry-run only | Exactly the current state: the full Typefully v2 interface exists (`lib/typefully.ts`) and is inert without the key. Setting the key is the only switch. |
+
+### Turning zero-touch publishing on (later)
+
+Set `TYPEFULLY_API_KEY` (and optionally `TYPEFULLY_SOCIAL_SET_ID`) in Vercel.
+Slots: X daily 08:30 SGT, LinkedIn Mon/Wed/Fri 09:00 SGT. Before enabling,
+update the Sunday cleanup automation so it skips `Queued` items (standing
+coordination note from the Command Center build).

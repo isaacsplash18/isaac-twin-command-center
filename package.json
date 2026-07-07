@@ -11,7 +11,9 @@
     "migrate": "tsx scripts/migrate.ts",
     "verify:calibration-events": "tsx scripts/verify-calibration-events.ts",
     "verify:proposals": "tsx scripts/verify-proposals.ts",
-    "verify:hermes-export": "tsx scripts/verify-hermes-export.ts"
+    "verify:hermes-export": "tsx scripts/verify-hermes-export.ts",
+    "verify:draft-bridge": "tsx scripts/verify-draft-bridge.ts",
+    "export:twin": "tsx scripts/export-twin-context.ts"
   },
   "dependencies": {
     "framer-motion": "^11.15.0",
