@@ -22,6 +22,7 @@ import { queryCalibrationEvents } from "@/lib/calibration-events";
 import { queryProposals } from "@/lib/proposals";
 import { PLATFORMS, TYPEFULLY_ENABLED } from "@/lib/config";
 import { itemsWithStatus } from "@/lib/items";
+import { queryEvents, readSelectProp } from "@/lib/notion";
 
 export const dynamic = "force-dynamic";
 
@@ -62,11 +63,15 @@ export async function GET(req: NextRequest) {
       warnings.push("DS_PROPOSALS not configured — proposals.pending/accepted are empty");
     }
 
-    const [events, pending, accepted] = await Promise.all([
+    const [events, pending, accepted, pipelineEvents24h] = await Promise.all([
       queryCalibrationEvents({ sinceIso: since, limit }),
       queryProposals({ status: "pending", limit: 100 }),
       queryProposals({ status: "accepted", limit: 100 }),
+      // Publish failures in the last 24h, from the Pipeline Events KPI log
+      // (Phase 10 — same source as the dashboard's failure banner).
+      queryEvents(new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()).catch(() => []),
     ]);
+    const failures24h = pipelineEvents24h.filter((e) => readSelectProp(e, "Event") === "Publish-failed").length;
 
     // drafts.pendingReview: count of Status=Draft across the 4 content DBs.
     // Each platform lane degrades independently — an unconfigured or
@@ -98,7 +103,7 @@ export async function GET(req: NextRequest) {
       events,
       proposals: { pending, accepted },
       drafts: { pendingReview },
-      publisher: { mode: TYPEFULLY_ENABLED ? "typefully" : "manual" },
+      publisher: { mode: TYPEFULLY_ENABLED ? "typefully" : "manual", failures24h },
       warnings,
     });
   } catch (err) {
