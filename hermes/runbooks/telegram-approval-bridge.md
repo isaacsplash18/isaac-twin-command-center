@@ -8,6 +8,11 @@
 
 # Telegram approval bridge
 
+> **⏸ PAUSED (8 July 2026):** do not install or schedule this worker — Isaac
+> moved all draft approvals into the Command Center, which is now the only
+> draft review surface. Kept for possible future reactivation. The
+> calibration sync worker is NOT affected and should run.
+
 Companion to `docs/telegram-approval-bridge.md` (the approved design). This
 worker closes the loop: it pushes pending drafts from the Command Center to
 Isaac on Telegram, and writes his `A` / `R <reason>` / `E <replacement>`

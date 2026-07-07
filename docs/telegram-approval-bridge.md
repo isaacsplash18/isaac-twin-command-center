@@ -1,5 +1,16 @@
 # Telegram Approval Bridge — Design (Phase 8)
 
+> **⏸ PAUSED — 8 July 2026, by Isaac's direction.** Draft approvals, edits and
+> calibration review are moving into the Command Center as the *only* review
+> surface. Do **not** use Telegram for draft approval. The Phase 9 code (CC
+> endpoints + `telegram_approval_bridge.py`) stays in the repo and in
+> hermes-context PR #1, inert: the worker is simply never installed/scheduled,
+> and the machine-lane endpoints it would call remain safe (they are the same
+> ones the Command Center flow uses). Hermes continues only as the worker/sync
+> layer (calibration sync worker is unaffected). Reactivating later = install
+> the worker per its runbook; nothing needs rebuilding.
+
+
 *Companion to `docs/hermes-calibration-plan.md` §4.6 and the build brief's "Phase 8
 — Telegram Approval Bridge Design". This is **design only**. No code ships from this
 document. Implementation is **Phase 9** and is **gated on Isaac's explicit approval of
