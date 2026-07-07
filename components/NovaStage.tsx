@@ -72,6 +72,12 @@ export function NovaStage({
 
   const skip = () => {
     if (!q?.answerBlockId) return;
+    // Fire-and-forget: log a LATER CalibrationEvent, but never block the UI on it.
+    fetch("/api/calibration/later", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ objectId: q.answerBlockId, topic: q.title }),
+    }).catch(() => {});
     setSkipped((s) => (s.includes(q.answerBlockId!) ? s : [...s, q.answerBlockId!]));
     next();
   };

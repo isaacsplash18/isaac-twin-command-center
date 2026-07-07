@@ -265,3 +265,84 @@ extend the script), commits.
 ## 9. Phase changelog
 
 *(appended by each phase)*
+
+### Phase 3 — Persist Calibration Events
+
+**Files changed:**
+
+- `lib/calibration-events.ts` (new) — `CalibrationEvent` type + `CalibrationSource` /
+  `CalibrationObjectType` / `CalibrationPlatform` / `CalibrationAction` / `CalibrationStatus`
+  unions; `logCalibrationEvent()` (fire-and-forget safe: warns + returns `null` if
+  `DS_CALIBRATION_EVENTS` is unset, catches and warns on any Notion error, never throws);
+  `queryCalibrationEvents({ sinceIso?, limit? })` (newest-first, maps Notion props back to
+  the interface, `[]` when unconfigured).
+- `scripts/migrate.ts` — added `ensureCalibrationEventsDb()` (search-first idempotent
+  create, same pattern as `ensureEventsDb`), wired into `main()`. Prints
+  `DS_CALIBRATION_EVENTS=<id>` when found/created. **Not run by this phase** — the
+  orchestrator runs `npm run migrate`.
+- `lib/actions.ts` — added `calibrationPlatform()` helper (maps `"ig-story"` →
+  `"ig_story"` etc.); `approveItem`/`rejectItem`/`editItem` each now also call
+  `logCalibrationEvent` (dual-logging alongside the existing `logEvent` Pipeline Events
+  call, which is untouched) with actions `approve` / `reject` / `edit` respectively,
+  `objectType: "draft"`, `objectId: pageId`, `topic` = the item's title.
+- `lib/calibration.ts` — `submitAnswer()` now logs exactly one CalibrationEvent per call:
+  `action` = the verdict lowercased (`confirm`/`sharpen`/`reject`) when given, else
+  `submit`; `objectType: "calibration_card"`, `objectId: answerBlockId`, `rawUserText` =
+  the answer text, `affectedPositionIds` = `[positionPageId]` when present,
+  `inferredDelta` = one of `position-confirmed` / `position-sharpened` /
+  `position-contested` / `answer-recorded` (deterministic label only, never fabricated),
+  `status` = `accepted` for `confirm` (already applied by the existing calibration write),
+  else `pending`.
+- `app/api/calibration/later/route.ts` (new) — `POST { objectId, topic? }`, session-authed
+  via the existing middleware (no allowlist change), logs action `later` /
+  `objectType: "calibration_card"` / `status: "pending"`. Uses the `handleAction` pattern.
+- `app/api/calibration-events/route.ts` (new) — `GET ?limit=&since=`, session-authed,
+  returns `{ events: CalibrationEvent[] }`. Same error-handling shape as `/api/queue`.
+- `components/NovaStage.tsx` — `skip()` now also fires-and-forgets a
+  `POST /api/calibration/later` with `{ objectId: answerBlockId, topic: question title }`
+  before rotating the question to the back of the queue. No other UI change.
+- `.env.example` — added `DS_CALIBRATION_EVENTS=` with a comment.
+- `scripts/verify-calibration-events.ts` (new) — if `DS_CALIBRATION_EVENTS` is unset,
+  prints a "run migration first" message and exits 0; otherwise creates one throwaway
+  event, reads it back, asserts a field-by-field round-trip, then archives the test page.
+- `package.json` — added `verify:calibration-events` script.
+- this doc (§9, this section).
+
+**New env vars:** `DS_CALIBRATION_EVENTS` (created by `npm run migrate`; the app degrades
+gracefully — logs a warning and no-ops — while it's unset).
+
+**How to verify:**
+
+1. Orchestrator runs `npm run migrate` (extends the script; this phase never ran it) and
+   pastes the printed `DS_CALIBRATION_EVENTS` into `.env` / Vercel.
+2. `npm run verify:calibration-events` — creates, reads back, asserts, archives a
+   throwaway test event; prints PASS/FAIL per assertion.
+3. `npx next build` stays green (verified this phase — clean build, both new routes
+   present: `/api/calibration-events`, `/api/calibration/later`).
+4. Manual smoke test against `npm run dev`: approve/reject/edit a draft, submit a
+   calibration answer with/without a verdict, tap LATER on a question — then
+   `GET /api/calibration-events?limit=20` (with the session cookie) should show one new
+   event per action, with `rawUserText`/`previousText`/`newText` populated as applicable.
+
+**Limitations:**
+
+- LATER logs on every tap, including repeated taps on the same question within a session
+  (no de-dup) — by design, so the frequency itself is a signal.
+- Draft approve/reject/edit events carry `affectedPositionIds: []` — drafts aren't linked
+  to Positions in this data model yet.
+- `submitAnswer`'s CalibrationEvent has no `topic` (the survey's `submitAnswer` signature
+  doesn't carry the question title) — its `Name` falls back to `objectId` (the answer
+  block id). LATER events do carry `topic` since `NovaStage` has the question title
+  in hand.
+- `logCalibrationEvent` truncates long fields to ~1900 chars before storing — full-length
+  originals are not preserved if a draft body or answer exceeds that.
+- No relation property to Positions Library (deliberate — cross-DB relation ids aren't
+  stable across data sources per §4.1); `Affected Position IDs` is a comma-separated
+  rich-text list, parsed back into `string[]` by `queryCalibrationEvents`.
+
+**Rollback:** `git revert` this phase's commit (removes all code changes; the
+`later`/`calibration-events` routes and dual-logging calls disappear, and `submitAnswer`/
+`approveItem`/`rejectItem`/`editItem` go back to Pipeline-Events-only). In Notion, archive
+the "Calibration Events" database from the UI — it's additive and nothing else depends on
+it. Unset `DS_CALIBRATION_EVENTS` to make the app treat it as not-yet-migrated again
+(logging becomes a no-op warning, same as before this phase).

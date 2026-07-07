@@ -11,6 +11,9 @@
  *    properties; the script prints manual instructions in that case).
  * 3. Creates the "Pipeline Events" DB under the Constitution hub if missing
  *    and prints its data source id for DS_EVENTS.
+ * 4. Creates the "Calibration Events" DB under the Constitution hub if
+ *    missing (Phase 3 — see docs/hermes-calibration-plan.md §4.1) and prints
+ *    its data source id for DS_CALIBRATION_EVENTS.
  */
 
 import "dotenv/config";
@@ -188,6 +191,93 @@ async function ensureEventsDb(): Promise<void> {
   console.log(`  + Created under Constitution hub. Set DS_EVENTS=${dsId}`);
 }
 
+async function ensureCalibrationEventsDb(): Promise<void> {
+  console.log(`\n— Calibration Events`);
+  // Search-first for an existing data source with this title (same
+  // idempotency style as ensureEventsDb).
+  const search = await notion(`/search`, {
+    method: "POST",
+    body: JSON.stringify({ query: "Calibration Events", filter: { property: "object", value: "data_source" } }),
+  });
+  const existing = (search.results ?? []).find(
+    (ds: Json) => ((ds.title ?? []).map((t: Json) => t.plain_text).join("") || "").trim() === "Calibration Events"
+  );
+  if (existing) {
+    console.log(`  = Already exists. DS_CALIBRATION_EVENTS=${existing.id}`);
+    return;
+  }
+  const db = await notion(`/databases`, {
+    method: "POST",
+    body: JSON.stringify({
+      parent: { type: "page_id", page_id: HUB_PAGE_ID },
+      title: [{ type: "text", text: { content: "Calibration Events" } }],
+      initial_data_source: {
+        properties: {
+          Name: { title: {} },
+          Source: {
+            select: {
+              options: [{ name: "command_center" }, { name: "telegram" }, { name: "hermes" }],
+            },
+          },
+          "Object Type": {
+            select: {
+              options: [
+                { name: "draft" },
+                { name: "position" },
+                { name: "calibration_card" },
+                { name: "wiki_note" },
+              ],
+            },
+          },
+          "Object ID": { rich_text: {} },
+          Platform: {
+            select: {
+              options: [
+                { name: "x" },
+                { name: "linkedin" },
+                { name: "ig_story" },
+                { name: "ig_carousel" },
+                { name: "unknown" },
+              ],
+            },
+          },
+          Topic: { rich_text: {} },
+          Action: {
+            select: {
+              options: [
+                { name: "approve" },
+                { name: "reject" },
+                { name: "edit" },
+                { name: "confirm" },
+                { name: "sharpen" },
+                { name: "submit" },
+                { name: "later" },
+              ],
+            },
+          },
+          "Raw User Text": { rich_text: {} },
+          "Previous Text": { rich_text: {} },
+          "New Text": { rich_text: {} },
+          "Affected Position IDs": { rich_text: {} },
+          "Inferred Delta": { rich_text: {} },
+          Status: {
+            select: {
+              options: [
+                { name: "pending" },
+                { name: "accepted" },
+                { name: "rejected" },
+                { name: "applied" },
+              ],
+            },
+          },
+        },
+      },
+    }),
+  });
+  const dsId = db.data_sources?.[0]?.id ?? "(check the new DB in Notion)";
+  console.log(`  + Created under Constitution hub. Set DS_CALIBRATION_EVENTS=${dsId}`);
+}
+
 async function main() {
   console.log(`Notion-Version: ${VERSION}`);
   console.log("Additive schema migration — existing properties are never renamed or removed.");
@@ -202,6 +292,11 @@ async function main() {
     await ensureEventsDb();
   } catch (err) {
     console.log(`✗ Pipeline Events: ${err instanceof Error ? err.message : err}`);
+  }
+  try {
+    await ensureCalibrationEventsDb();
+  } catch (err) {
+    console.log(`✗ Calibration Events: ${err instanceof Error ? err.message : err}`);
   }
   console.log("\nDone. Re-running is safe (idempotent).");
 }

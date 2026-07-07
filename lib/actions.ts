@@ -6,6 +6,7 @@
 
 import { PLATFORM_EVENT_NAMES } from "./config";
 import { readItemBody, toContentItem, platformFromPage } from "./items";
+import { CalibrationPlatform, logCalibrationEvent } from "./calibration-events";
 import {
   buildStatusUpdate,
   getPage,
@@ -13,10 +14,17 @@ import {
   readCheckboxProp,
   readRichTextProp,
   readStatus,
+  readTitle,
   richTextValue,
   updatePage,
   writeBody,
 } from "./notion";
+
+/** Map the app's platform key (e.g. "ig-story") to the CalibrationEvents schema's snake_case value. */
+function calibrationPlatform(key: string): CalibrationPlatform {
+  const mapped = key.replace(/-/g, "_");
+  return (["x", "linkedin", "ig_story", "ig_carousel"].includes(mapped) ? mapped : "unknown") as CalibrationPlatform;
+}
 
 export class ActionError extends Error {
   constructor(
@@ -71,6 +79,16 @@ export async function approveItem(pageId: string) {
     diff: edited && original ? buildDiff(original, body) : undefined,
   });
 
+  await logCalibrationEvent({
+    action: "approve",
+    objectType: "draft",
+    objectId: pageId,
+    platform: calibrationPlatform(p.key),
+    topic: readTitle(page),
+    previousText: edited && original ? original : undefined,
+    newText: body,
+  });
+
   return toContentItem(await getPage(pageId), p, false);
 }
 
@@ -81,6 +99,13 @@ export async function rejectItem(pageId: string) {
   const dsId = process.env[p.dsEnv]!;
   await updatePage(pageId, await buildStatusUpdate(dsId, "Rejected"));
   await logEvent({ event: "Rejected", platform: PLATFORM_EVENT_NAMES[p.key], itemUrl: page.url });
+  await logCalibrationEvent({
+    action: "reject",
+    objectType: "draft",
+    objectId: pageId,
+    platform: calibrationPlatform(p.key),
+    topic: readTitle(page),
+  });
   return { ok: true };
 }
 
@@ -104,6 +129,16 @@ export async function editItem(pageId: string, newText: string) {
     await writeBody(pageId, newText);
   }
   await updatePage(pageId, updates as never);
+  await logCalibrationEvent({
+    action: "edit",
+    objectType: "draft",
+    objectId: pageId,
+    platform: calibrationPlatform(p.key),
+    topic: readTitle(page),
+    previousText: currentBody,
+    newText,
+    rawUserText: newText,
+  });
   return { ok: true, body: newText };
 }
 

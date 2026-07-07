@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "discover": "tsx scripts/discover.ts",
-    "migrate": "tsx scripts/migrate.ts"
+    "migrate": "tsx scripts/migrate.ts",
+    "verify:calibration-events": "tsx scripts/verify-calibration-events.ts"
   },
   "dependencies": {
     "framer-motion": "^11.15.0",

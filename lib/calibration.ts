@@ -22,6 +22,7 @@
  */
 
 import { listBlocks, notionFetch, plainText } from "./notion";
+import { CalibrationAction, logCalibrationEvent } from "./calibration-events";
 
 const DEFAULT_SURVEY_PAGE = "36f1fec9ef8381ceb927eca8fa3c5ed6";
 
@@ -185,5 +186,27 @@ export async function submitAnswer(opts: {
       console.warn("Calibration write to position failed:", err);
     }
   }
+
+  // One CalibrationEvent per submission (Phase 3): the verdict (lowercased)
+  // when given, else "submit". Confirm is treated as already-applied by the
+  // deterministic calibration above; everything else stays pending review.
+  const action: CalibrationAction = opts.verdict ? (opts.verdict.toLowerCase() as CalibrationAction) : "submit";
+  const inferredDelta = !opts.verdict
+    ? "answer-recorded"
+    : opts.verdict === "Confirm"
+      ? "position-confirmed"
+      : opts.verdict === "Sharpen"
+        ? "position-sharpened"
+        : "position-contested";
+  await logCalibrationEvent({
+    action,
+    objectType: "calibration_card",
+    objectId: opts.answerBlockId,
+    rawUserText: answer,
+    affectedPositionIds: opts.positionPageId ? [opts.positionPageId] : [],
+    inferredDelta,
+    status: opts.verdict === "Confirm" ? "accepted" : "pending",
+  });
+
   return { calibrated };
 }
