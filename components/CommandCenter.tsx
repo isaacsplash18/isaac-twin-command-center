@@ -181,7 +181,7 @@ export function CommandCenter() {
       {/* Publish failure banner */}
       {failures.length > 0 && (
         <div className="border-b border-oxbright/40 bg-oxblood/20 px-4 py-2 sm:px-6">
-          <p className="font-mono text-xs text-ink">
+          <p className="break-words font-mono text-xs text-ink">
             ⚠ {failures.length} PUBLISH FAILURE{failures.length === 1 ? "" : "S"} —{" "}
             {failures[0].platform ?? ""} {failures[0].notes?.slice(0, 80)}
             {failures[0].itemUrl && (
@@ -195,15 +195,46 @@ export function CommandCenter() {
 
       {queue.error && (
         <div className="border-b border-amber/40 bg-amber/10 px-4 py-2 sm:px-6">
-          <p className="font-mono text-xs text-ink">{queue.error}</p>
+          <p className="break-words font-mono text-xs text-ink">{queue.error}</p>
         </div>
       )}
 
       <main className="mx-auto max-w-[1400px] p-4 sm:p-6">
         {/* Cockpit: modules left and right, Nova (asking calibration
-            questions one at a time) centre stage */}
-        <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)_300px]">
-          <div className="order-2 flex flex-col gap-4 lg:order-1">
+            questions one at a time) centre stage. On mobile (<lg) the
+            approval queue — the #1 daily action — sits right under Nova
+            instead of at the very bottom; on lg+ this grid is pixel-identical
+            to the original 3-column layout with the queue full-width below. */}
+        {/* grid-cols-1 (= minmax(0,1fr)) is load-bearing on mobile: without an
+            explicit track, the implicit column auto-sizes to its widest child
+            (the calibration card's max-w-xl) and overflows the viewport. */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_minmax(0,1fr)_300px]">
+          <section aria-label="Nova" className="order-1 flex justify-center lg:order-2">
+            <NovaStage mood={nova.mood} idleLine={nova.lines[novaIdx % nova.lines.length]} onToast={toast} />
+          </section>
+
+          {/* Approval queue — mobile: right after Nova. Desktop: full width,
+              below the 3-col row, with an extra lg:mt-2 so the gap above it
+              matches the original 24px (mt-6) spacing exactly (grid gap-4
+              already contributes 16px). */}
+          <div className="order-2 lg:order-4 lg:col-span-3 lg:mt-2">
+            {queue.loading && !data ? (
+              <div className="border border-hairline bg-panel p-8 text-center">
+                <p className="font-mono text-xs tracking-[0.2em] text-ink-dim">LOADING DRAFTS…</p>
+              </div>
+            ) : (
+              <ApprovalQueue
+                drafts={data?.drafts ?? []}
+                tab={tab}
+                onTab={setTab}
+                onRemoved={removeDraft}
+                onError={restoreDraft}
+                onToast={toast}
+              />
+            )}
+          </div>
+
+          <div className="order-3 flex flex-col gap-4 lg:order-1">
             <QueuePanel
               approved={data?.approved ?? []}
               queued={data?.queued ?? []}
@@ -217,34 +248,12 @@ export function CommandCenter() {
             <KpiPanel index={2} />
           </div>
 
-          <section aria-label="Nova" className="order-1 flex justify-center lg:order-2">
-            <NovaStage mood={nova.mood} idleLine={nova.lines[novaIdx % nova.lines.length]} onToast={toast} />
-          </section>
-
-          <div className="order-3 flex flex-col gap-4">
+          <div className="order-4 flex flex-col gap-4 lg:order-3">
             <ProposalsPanel index={3} onError={toast} />
             <PositionsPanel data={panels.data?.positions} index={4} />
             <InputsPanel inbox={panels.data?.inbox} wiki={panels.data?.wiki} index={5} />
             <AutomationsPanel index={6} />
           </div>
-        </div>
-
-        {/* Below the stage: the approval queue, full width */}
-        <div className="mt-6">
-          {queue.loading && !data ? (
-            <div className="border border-hairline bg-panel p-8 text-center">
-              <p className="font-mono text-xs tracking-[0.2em] text-ink-dim">LOADING DRAFTS…</p>
-            </div>
-          ) : (
-            <ApprovalQueue
-              drafts={data?.drafts ?? []}
-              tab={tab}
-              onTab={setTab}
-              onRemoved={removeDraft}
-              onError={restoreDraft}
-              onToast={toast}
-            />
-          )}
         </div>
       </main>
 
@@ -252,7 +261,7 @@ export function CommandCenter() {
       <div className="pointer-events-none fixed bottom-4 left-1/2 z-[95] flex w-full max-w-sm -translate-x-1/2 flex-col gap-2 px-4">
         {toasts.map((t) => (
           <div key={t.id} className="pointer-events-auto border border-oxbright/50 bg-panel px-4 py-2.5 shadow-xl">
-            <p className="font-mono text-xs text-ink">{t.message}</p>
+            <p className="break-words font-mono text-xs text-ink">{t.message}</p>
           </div>
         ))}
       </div>

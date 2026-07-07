@@ -121,7 +121,7 @@ export function NovaStage({
 
       {asking && q && (
         // The question floats over the hologram's lower half — Nova is asking.
-        <div className="relative z-10 -mt-40 w-full max-w-xl border border-hairline bg-panel/90 p-4 shadow-[0_0_40px_rgba(0,0,0,0.6)] sm:p-5">
+        <div className="relative z-10 -mt-16 w-full max-w-xl border border-hairline bg-panel/90 p-4 shadow-[0_0_40px_rgba(0,0,0,0.6)] sm:-mt-40 sm:p-5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="font-mono text-[9px] tracking-[0.25em] text-oxbright">
               CALIBRATION · {open.length} LEFT THIS ROUND
@@ -137,9 +137,9 @@ export function NovaStage({
             )}
           </div>
 
-          <h3 className="mt-1.5 text-base font-semibold text-ink">{q.title}</h3>
-          {q.guess && <p className="mt-1.5 font-serif text-[14px] leading-relaxed text-ink">{q.guess}</p>}
-          {q.why && <p className="mt-1.5 text-xs leading-relaxed text-ink-dim">{q.why}</p>}
+          <h3 className="mt-1.5 break-words text-base font-semibold text-ink">{q.title}</h3>
+          {q.guess && <p className="mt-1.5 break-words font-serif text-[14px] leading-relaxed text-ink">{q.guess}</p>}
+          {q.why && <p className="mt-1.5 break-words text-xs leading-relaxed text-ink-dim">{q.why}</p>}
 
           <div className="mt-3 flex flex-wrap items-center gap-px">
             {VERDICTS.map((v) => (
@@ -147,7 +147,7 @@ export function NovaStage({
                 key={v}
                 type="button"
                 onClick={() => setVerdict(verdict === v ? null : v)}
-                className={`px-3 py-1.5 font-mono text-[10px] tracking-[0.15em] transition-colors ${
+                className={`flex min-h-11 items-center justify-center px-3 py-1.5 font-mono text-[11px] tracking-[0.15em] transition-colors sm:min-h-0 sm:text-[10px] ${
                   verdict === v
                     ? v === "Reject"
                       ? "border border-oxbright/60 bg-oxblood/30 text-ink"
@@ -183,7 +183,7 @@ export function NovaStage({
               type="button"
               disabled={busy}
               onClick={submit}
-              className="flex-1 border border-oxbright/60 bg-oxblood/30 px-4 py-2.5 font-mono text-xs tracking-[0.2em] text-ink hover:bg-oxblood/50 active:bg-oxblood/70 disabled:opacity-50"
+              className="flex min-h-11 flex-1 items-center justify-center border border-oxbright/60 bg-oxblood/30 px-4 py-2.5 font-mono text-xs tracking-[0.2em] text-ink hover:bg-oxblood/50 active:bg-oxblood/70 disabled:opacity-50 sm:min-h-0"
             >
               {busy ? "CALIBRATING…" : "SUBMIT"}
             </button>
@@ -191,7 +191,7 @@ export function NovaStage({
               type="button"
               disabled={busy}
               onClick={skip}
-              className="border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink-dim hover:text-ink disabled:opacity-50"
+              className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink-dim hover:text-ink disabled:opacity-50 sm:min-h-0"
             >
               LATER
             </button>

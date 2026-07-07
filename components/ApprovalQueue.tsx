@@ -38,7 +38,7 @@ export function ApprovalQueue({
               key={t.key}
               type="button"
               onClick={() => onTab(t.key)}
-              className={`px-3 py-1.5 font-mono text-[10px] tracking-[0.15em] transition-colors ${
+              className={`flex min-h-11 items-center justify-center px-3 py-1.5 font-mono text-[11px] tracking-[0.15em] transition-colors sm:min-h-0 sm:text-[10px] ${
                 tab === t.key ? "bg-panel text-ink border border-hairline" : "text-ink-dim hover:text-ink border border-transparent"
               }`}
             >
@@ -146,7 +146,7 @@ function DraftCard({
         />
       ) : (
         // The content is the hero — Newsreader, reads like writing (PRD §5.2)
-        <div className="mt-3 whitespace-pre-wrap font-serif text-[15px] leading-relaxed text-ink">{item.body}</div>
+        <div className="mt-3 whitespace-pre-wrap break-words font-serif text-[15px] leading-relaxed text-ink">{item.body}</div>
       )}
 
       {item.slides && !editing && (
@@ -154,7 +154,7 @@ function DraftCard({
           <summary className="cursor-pointer font-mono text-[10px] tracking-[0.15em] text-ink-dim">
             SLIDE TEXTS
           </summary>
-          <div className="mt-2 whitespace-pre-wrap font-serif text-sm leading-relaxed text-ink-dim">{item.slides}</div>
+          <div className="mt-2 whitespace-pre-wrap break-words font-serif text-sm leading-relaxed text-ink-dim">{item.slides}</div>
         </details>
       )}
 
@@ -183,7 +183,7 @@ function DraftCard({
               type="button"
               disabled={busy === "save"}
               onClick={saveEdit}
-              className="flex-1 border border-ink/30 bg-ink/10 px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink hover:bg-ink/15 disabled:opacity-50"
+              className="flex min-h-11 flex-1 items-center justify-center border border-ink/30 bg-ink/10 px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink hover:bg-ink/15 disabled:opacity-50 sm:min-h-0"
             >
               {busy === "save" ? "SAVING…" : "SAVE"}
             </button>
@@ -193,7 +193,7 @@ function DraftCard({
                 setEditing(false);
                 setText(item.body);
               }}
-              className="border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink-dim hover:text-ink"
+              className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink-dim hover:text-ink sm:min-h-0"
             >
               CANCEL
             </button>
@@ -204,7 +204,7 @@ function DraftCard({
               type="button"
               disabled={busy !== null}
               onClick={() => act("approve")}
-              className="flex-1 border border-oxbright/60 bg-oxblood/30 px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink hover:bg-oxblood/50 active:bg-oxblood/70 disabled:opacity-50"
+              className="flex min-h-11 flex-1 items-center justify-center border border-oxbright/60 bg-oxblood/30 px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink hover:bg-oxblood/50 active:bg-oxblood/70 disabled:opacity-50 sm:min-h-0"
             >
               APPROVE
             </button>
@@ -212,14 +212,14 @@ function DraftCard({
               type="button"
               disabled={busy !== null}
               onClick={() => act("reject")}
-              className="border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink-dim hover:text-ink disabled:opacity-50"
+              className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink-dim hover:text-ink disabled:opacity-50 sm:min-h-0"
             >
               REJECT
             </button>
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink-dim hover:text-ink"
+              className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink-dim hover:text-ink sm:min-h-0"
             >
               EDIT
             </button>

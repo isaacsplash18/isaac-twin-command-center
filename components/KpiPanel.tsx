@@ -124,7 +124,7 @@ export function KpiPanel({ index }: { index: number }) {
               key={w}
               type="button"
               onClick={() => setWindowDays(w)}
-              className={`px-2 py-0.5 tracking-wider ${
+              className={`flex min-h-11 items-center justify-center px-2 py-0.5 text-[11px] tracking-wider sm:min-h-0 sm:text-[10px] ${
                 windowDays === w ? "bg-ink/10 text-ink" : "text-ink-dim hover:text-ink"
               }`}
             >

@@ -25,5 +25,10 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|manifest.json).*)"],
+  // icon.png / apple-icon.png / manifest.webmanifest / icons/* are fetched by
+  // iOS/Android without cookies when adding to the home screen, so they must
+  // stay reachable unauthenticated or home-screen icons silently 307 to /login.
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|icon.svg|icon.png|apple-icon.png|manifest.json|manifest.webmanifest|icons/).*)",
+  ],
 };

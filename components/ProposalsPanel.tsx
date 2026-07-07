@@ -68,7 +68,7 @@ export function ProposalsPanel({ index, onError }: { index: number; onError: (ms
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="border border-hairline px-2 py-0.5 font-mono text-[9px] tracking-wider text-ink-dim hover:text-ink disabled:opacity-40"
+      className="flex min-h-11 items-center justify-center border border-hairline px-2 py-0.5 font-mono text-[11px] tracking-wider text-ink-dim hover:text-ink disabled:opacity-40 sm:min-h-0 sm:text-[9px]"
     >
       {label}
     </button>
@@ -90,19 +90,19 @@ export function ProposalsPanel({ index, onError }: { index: number; onError: (ms
             <div className="mt-2 space-y-1.5">
               <div>
                 <div className="font-mono text-[9px] tracking-[0.2em] text-ink-dim/70">CURRENT</div>
-                <p className="mt-0.5 whitespace-pre-line font-serif text-xs leading-snug text-ink-dim">
+                <p className="mt-0.5 whitespace-pre-line break-words font-serif text-xs leading-snug text-ink-dim">
                   {p.currentPositionText || "—"}
                 </p>
               </div>
               <div>
                 <div className="font-mono text-[9px] tracking-[0.2em] text-ink-dim/70">PROPOSED</div>
-                <p className="mt-0.5 whitespace-pre-line font-serif text-xs leading-snug text-ink">
+                <p className="mt-0.5 whitespace-pre-line break-words font-serif text-xs leading-snug text-ink">
                   {p.proposedPositionText || "—"}
                 </p>
               </div>
             </div>
 
-            {p.reason && <p className="mt-2 font-mono text-[9px] leading-snug text-ink-dim/80">{p.reason}</p>}
+            {p.reason && <p className="mt-2 break-words font-mono text-[9px] leading-snug text-ink-dim/80">{p.reason}</p>}
 
             <div className="mt-2 flex gap-2">
               <MiniBtn label="ACCEPT" disabled={busyId !== null} onClick={() => act(p, "accept")} />

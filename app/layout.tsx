@@ -14,6 +14,11 @@ export const metadata: Metadata = {
   title: "Isaac Twin — Command Center",
   description: "Approval and publishing surface for Isaac's content twin.",
   robots: { index: false, follow: false },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Nova",
+  },
 };
 
 export const viewport: Viewport = {
