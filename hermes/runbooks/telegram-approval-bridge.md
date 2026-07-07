@@ -27,14 +27,18 @@ replies back as decisions.
    gateway assumption means `getUpdates` silently never returns anything,
    and replies would never be drained (fails closed, not open — see
    Limitations below).
-2. **(O2) Put the exact numeric chat id in `TELEGRAM_CHAT_ID_ALLOWLIST`.**
-   The design doc's runbook line "the numeric user ID is authorised" never
-   printed the actual number — get it (e.g. by messaging the bot once it
-   exists and reading `from.id` off the first `getUpdates` response, or via
-   `@userinfobot`) and set it in `hermes/.env`. This is the *only* authZ
-   boundary on the reply side (§7) — an empty or wrong value means either
-   nobody can decide anything (fails closed, safe) or the wrong person can
-   (unsafe) — get this right before going live.
+2. **(O2 — ANSWERED, 7 July 2026) Put the numeric chat id in
+   `TELEGRAM_CHAT_ID_ALLOWLIST`.** Isaac confirmed his id:
+
+   ```bash
+   TELEGRAM_CHAT_ID_ALLOWLIST=115000320
+   ```
+
+   Set exactly that in `~/twin/.env`. This is the *only* authZ boundary on
+   the reply side (§7) — an empty value fails closed (nobody can decide,
+   safe); a wrong value would let the wrong person decide (unsafe). If the
+   id ever needs re-checking, message the bot and read `from.id` off the
+   first `getUpdates` response, or use `@userinfobot`.
 
 Until both are done, the worker can still be exercised safely with
 `--dry-run` (and `--dry-run --fixture <path>` needs neither) — see Testing
