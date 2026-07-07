@@ -32,6 +32,22 @@ type Json = any;
 export type ProposalConfidence = "low" | "medium" | "high";
 export type ProposalStatus = "pending" | "accepted" | "rejected" | "applied";
 
+/**
+ * Identity Calibration: which canonical surface an amendment targets. `position`
+ * is the back-compat default — a row written before this field existed (no
+ * Target Type) reads back as `position`. `unclassified` is the inbox lane for
+ * signals we captured but haven't classified yet (e.g. a bare rejection reason).
+ */
+export type ProposalTargetType = "position" | "voice" | "constitution" | "workflow" | "unclassified";
+
+export const PROPOSAL_TARGET_TYPES: ProposalTargetType[] = [
+  "position",
+  "voice",
+  "constitution",
+  "workflow",
+  "unclassified",
+];
+
 export interface PositionUpdateProposal {
   id: string;
   /** Notion `created_time`. */
@@ -47,6 +63,10 @@ export interface PositionUpdateProposal {
   evidenceSummary: string;
   confidence: ProposalConfidence;
   status: ProposalStatus;
+  /** Canonical surface this amendment targets. Missing → "position" (back-compat). */
+  targetType: ProposalTargetType;
+  /** Platform key for workflow/voice amendments, free label otherwise. "" when absent. */
+  targetRef: string;
 }
 
 // Same 1900-char snapshot bound as calibration events / lib/calibration.ts.
@@ -78,7 +98,76 @@ function pageToProposal(page: Json): PositionUpdateProposal {
     evidenceSummary: readRichTextProp(page, "Evidence Summary"),
     confidence: (readSelectProp(page, "Confidence") as ProposalConfidence) ?? "low",
     status: (readSelectProp(page, "Status") as ProposalStatus) ?? "pending",
+    // Missing Target Type = "position" (back-compat with pre-Identity-Calibration rows).
+    targetType: (readSelectProp(page, "Target Type") as ProposalTargetType) ?? "position",
+    targetRef: readRichTextProp(page, "Target Ref"),
   };
+}
+
+// Matches the Notion "unknown property" validation error, so a proposals DB
+// that hasn't had Target Type / Target Ref migrated on yet still gets a
+// proposal written (without those two props) rather than the generation failing.
+const TARGET_PROP_MISMATCH = /Target Type|Target Ref|is not a property that exists|property that does not exist|is not a valid property/i;
+
+/** Fields for a single proposal page write, shared by both generators. */
+interface ProposalDraft {
+  sourceEventIds: string[];
+  affectedPositionId: string;
+  topic: string;
+  currentPositionText: string;
+  proposedPositionText: string;
+  reason: string;
+  evidenceSummary: string;
+  confidence: ProposalConfidence;
+  targetType: ProposalTargetType;
+  targetRef: string;
+}
+
+/**
+ * Create one proposal page from a ProposalDraft. Writes Target Type / Target Ref
+ * when the schema has them, and retries without them on a schema-mismatch (the
+ * additive props may not be migrated yet — same defensive pattern as
+ * lib/items.ts `createDraft`). Assumes DS_PROPOSALS is set (callers check).
+ */
+async function writeProposal(ds: string, d: ProposalDraft): Promise<PositionUpdateProposal> {
+  const schema = await getDataSourceSchema(ds);
+  const titleProp = titlePropertyName(schema);
+  const name = (`${d.topic}`.trim() || d.targetRef || d.targetType).slice(0, 200);
+
+  const baseProperties: Record<string, unknown> = {
+    [titleProp]: { title: [{ type: "text", text: { content: name } }] },
+    "Source Event IDs": richTextValue(truncate(d.sourceEventIds.join(","))),
+    "Affected Position ID": richTextValue(truncate(d.affectedPositionId)),
+    Topic: richTextValue(truncate(d.topic)),
+    "Current Position Text": richTextValue(truncate(d.currentPositionText)),
+    "Proposed Position Text": richTextValue(truncate(d.proposedPositionText)),
+    Reason: richTextValue(truncate(d.reason)),
+    "Evidence Summary": richTextValue(truncate(d.evidenceSummary)),
+    Confidence: { select: { name: d.confidence } },
+    Status: { select: { name: "pending" } },
+  };
+  const targetProperties: Record<string, unknown> = {
+    "Target Type": { select: { name: d.targetType } },
+    "Target Ref": richTextValue(truncate(d.targetRef)),
+  };
+
+  const create = (properties: Record<string, unknown>) =>
+    notionFetch(`/pages`, {
+      method: "POST",
+      body: JSON.stringify({
+        parent: { type: "data_source_id", data_source_id: ds },
+        properties,
+      }),
+    });
+
+  try {
+    return pageToProposal(await create({ ...baseProperties, ...targetProperties }));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!TARGET_PROP_MISMATCH.test(message)) throw err;
+    console.warn("Target Type / Target Ref not yet migrated — writing proposal without them (run npm run migrate)");
+    return pageToProposal(await create(baseProperties));
+  }
 }
 
 /**
@@ -177,33 +266,114 @@ export async function maybeCreateProposalFromEvent(
 
     const topic = event.topic || positionTitle || affectedPositionId;
     const evidenceSummary = `${event.action} · event ${event.id} · ${new Date(event.createdAt).toISOString()}`;
-    const name = `${topic}`.slice(0, 200) || affectedPositionId;
 
-    const schema = await getDataSourceSchema(ds);
-    const titleProp = titlePropertyName(schema);
-
-    const page = await notionFetch(`/pages`, {
-      method: "POST",
-      body: JSON.stringify({
-        parent: { type: "data_source_id", data_source_id: ds },
-        properties: {
-          [titleProp]: { title: [{ type: "text", text: { content: name } }] },
-          "Source Event IDs": richTextValue(truncate(event.id)),
-          "Affected Position ID": richTextValue(truncate(affectedPositionId)),
-          Topic: richTextValue(truncate(topic)),
-          "Current Position Text": richTextValue(truncate(currentPositionText)),
-          "Proposed Position Text": richTextValue(truncate(rawUserText)),
-          Reason: richTextValue(truncate(reason)),
-          "Evidence Summary": richTextValue(truncate(evidenceSummary)),
-          Confidence: { select: { name: confidence } },
-          Status: { select: { name: "pending" } },
-        },
-      }),
+    return await writeProposal(ds, {
+      sourceEventIds: [event.id],
+      affectedPositionId,
+      topic,
+      currentPositionText,
+      proposedPositionText: rawUserText,
+      reason,
+      evidenceSummary,
+      confidence,
+      // Survey-driven proposals target a canonical Position (back-compat default).
+      targetType: "position",
+      targetRef: "",
     });
-
-    return pageToProposal(page);
   } catch (err) {
     console.warn("maybeCreateProposalFromEvent failed (non-fatal):", err);
+    return null;
+  }
+}
+
+/**
+ * Identity Calibration: turn a *draft* CalibrationEvent (approve/reject/edit on
+ * a draft card) into at most one pending amendment. Deterministic, never
+ * invented, never auto-applied:
+ *
+ *   - draft "edit"  → voice amendment: targetRef = platform, proposedText = the
+ *                     new body, evidence = before/after excerpt, confidence low.
+ *   - draft "reject" WITH a non-empty reason → unclassified amendment: proposedText
+ *                     = the reason verbatim, evidence = draft title + platform,
+ *                     confidence low.
+ *   - draft "reject" with NO reason → null (no signal — an honest boundary).
+ *   - anything else (approve, non-draft object) → null.
+ *
+ * Idempotency: skip if a pending proposal already references this source event id
+ * (query-before-create). Fire-and-forget safe: warns + returns null when
+ * DS_PROPOSALS is unset, and never throws — a generation failure must never fail
+ * the user's approve/reject/edit action.
+ */
+export async function maybeCreateAmendmentFromDraftEvent(
+  event: CalibrationEvent | null
+): Promise<PositionUpdateProposal | null> {
+  if (!event || event.objectType !== "draft") return null;
+
+  const platform = event.platform || "unknown";
+  let targetType: ProposalTargetType;
+  let proposedText: string;
+  let evidenceSummary: string;
+  let reason: string;
+
+  if (event.action === "edit") {
+    proposedText = (event.newText ?? "").trim();
+    if (!proposedText) return null;
+    targetType = "voice";
+    reason = "auto-generated from a draft edit — classify/edit before accepting";
+    const before = (event.previousText ?? "").slice(0, 400);
+    const after = proposedText.slice(0, 400);
+    evidenceSummary = `Draft edit on ${platform}\nBEFORE: ${before}\nAFTER: ${after}`;
+  } else if (event.action === "reject") {
+    proposedText = (event.rawUserText ?? "").trim();
+    if (!proposedText) return null; // reject with no reason → no amendment
+    targetType = "unclassified";
+    reason = "auto-generated from a draft rejection reason — classify/edit before accepting";
+    evidenceSummary = `Draft reject — ${event.topic || event.objectId} · ${platform}`;
+  } else {
+    return null;
+  }
+
+  const ds = process.env.DS_PROPOSALS;
+  if (!ds) {
+    console.warn("DS_PROPOSALS not set — skipping amendment generation for draft event", event.id);
+    return null;
+  }
+
+  try {
+    // Idempotency by source event id (each edit/reject gets a fresh event id).
+    const existing = await queryDataSource(
+      ds,
+      {
+        filter: {
+          and: [
+            { property: "Source Event IDs", rich_text: { contains: event.id } },
+            { property: "Status", select: { equals: "pending" } },
+          ],
+        },
+        page_size: 1,
+      },
+      1
+    );
+    if (existing.length > 0) {
+      console.warn(`Pending amendment already exists for event ${event.id} — not duplicating.`);
+      return null;
+    }
+
+    const trailer = `${event.action} · draft event ${event.id} · ${new Date(event.createdAt).toISOString()}`;
+    return await writeProposal(ds, {
+      sourceEventIds: [event.id],
+      affectedPositionId: "",
+      topic: event.topic || `${platform} draft`,
+      currentPositionText: "",
+      proposedPositionText: proposedText,
+      reason,
+      evidenceSummary: `${evidenceSummary}\n${trailer}`,
+      confidence: "low",
+      targetType,
+      targetRef: platform,
+    });
+  } catch (err) {
+    console.warn("maybeCreateAmendmentFromDraftEvent failed (non-fatal):", err);
     return null;
   }
 }
@@ -241,6 +411,33 @@ export async function setProposalStatus(
   const page = await notionFetch(`/pages/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ properties: { Status: { select: { name: status } } } }),
+  });
+  return pageToProposal(page);
+}
+
+/**
+ * Identity Calibration: edit an amendment's proposed text and/or reclassify it
+ * (Target Type / Target Ref) before Isaac accepts it. Session-lane only, guarded
+ * to `pending` by the route. Never touches canonical identity — this only edits
+ * the reviewable amendment row itself. Returns the updated proposal.
+ */
+export async function updateProposal(
+  id: string,
+  fields: { proposedText?: string; targetType?: ProposalTargetType; targetRef?: string }
+): Promise<PositionUpdateProposal> {
+  const properties: Record<string, unknown> = {};
+  if (fields.proposedText !== undefined) {
+    properties["Proposed Position Text"] = richTextValue(truncate(fields.proposedText));
+  }
+  if (fields.targetType !== undefined) {
+    properties["Target Type"] = { select: { name: fields.targetType } };
+  }
+  if (fields.targetRef !== undefined) {
+    properties["Target Ref"] = richTextValue(truncate(fields.targetRef));
+  }
+  const page = await notionFetch(`/pages/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ properties }),
   });
   return pageToProposal(page);
 }

@@ -8,7 +8,7 @@ import { KpiPanel } from "./KpiPanel";
 import { NovaStage } from "./NovaStage";
 import { novaState } from "./novaVoice";
 import { QueuePanel } from "./QueuePanel";
-import { ProposalsPanel } from "./ProposalsPanel";
+import { IdentityCalibrationPanel } from "./IdentityCalibrationPanel";
 import { AutomationsPanel, InputsPanel, PositionsPanel } from "./SidePanels";
 import { Ticker } from "./Ticker";
 import { postAction, useApi } from "./useApi";
@@ -249,7 +249,7 @@ export function CommandCenter() {
           </div>
 
           <div className="order-4 flex flex-col gap-4 lg:order-3">
-            <ProposalsPanel index={3} onError={toast} />
+            <IdentityCalibrationPanel index={3} onError={toast} />
             <PositionsPanel data={panels.data?.positions} index={4} />
             <InputsPanel inbox={panels.data?.inbox} wiki={panels.data?.wiki} index={5} />
             <AutomationsPanel index={6} />

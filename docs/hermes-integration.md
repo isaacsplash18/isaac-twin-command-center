@@ -123,7 +123,12 @@ curl -s \
         "reason": "Isaac's own words from a SHARPEN verdict on the weekly survey",
         "evidenceSummary": "sharpen · event 1a2b3c4d-... · 2026-07-06T14:02:11.000Z",
         "confidence": "medium",
-        "status": "pending"
+        "status": "pending",
+        // Identity Calibration (additive, version unchanged). Which canonical
+        // surface the amendment targets, and a platform key / free label.
+        // A proposal written before this field existed reads back as "position".
+        "targetType": "position",
+        "targetRef": ""
       }
     ],
 
@@ -160,7 +165,14 @@ curl -s \
 - **`events`** — newest first (Notion `created_time` descending). Empty when
   `DS_CALIBRATION_EVENTS` is unset; a matching entry appears in `warnings`.
 - **`proposals.pending`** — awaiting Isaac's ACCEPT/REJECT in the Command
-  Center UI. Not canonical.
+  Center UI. Not canonical. Each carries a `targetType`
+  (`position` | `voice` | `constitution` | `workflow` | `unclassified`) and a
+  `targetRef` (platform key for voice/workflow amendments, free label
+  otherwise). These are **additive** fields (added by the Identity Calibration
+  layer); `version` stays `1`. A proposal that predates the field, or a row with
+  no Target Type, reads back as `targetType: "position"`. `unclassified` is the
+  inbox lane for captured-but-not-yet-classified signals (e.g. a bare draft
+  rejection reason).
 - **`proposals.accepted`** — Isaac has accepted the *proposal itself* for
   further consideration, but the text has **not** been written back to the
   Positions Library, the weekly survey, or the twin repo. **Hermes must not

@@ -546,3 +546,19 @@ together. Full per-phase changelogs live in `docs/changelogs/phase-{6,7,8,10,11}
   added to the export (additive, version 1); docs section in hermes-integration.md.
 - **P11** — Notion→twin exporter (`scripts/export-twin-context.ts`, dry-run default,
   discovery-based, 7 real exports + 4 documented stubs in `hermes/export-preview/`).
+
+### Identity Calibration layer + review-UX upgrade
+
+Generalises Phase 4 proposals into **amendments** across voice / constitution / positions /
+workflows, and upgrades the Command Center draft-review UX (the Command Center is now the
+only review surface; the Telegram bridge is paused). Additive `Target Type` / `Target Ref`
+props on the Position Proposals DB (patched onto the existing DB by `scripts/migrate.ts`;
+a missing `Target Type` reads back as `position`). Draft `edit` → a pending `voice`
+amendment; draft `reject` **with a reason** → a pending `unclassified` amendment; no reason
+→ nothing (deterministic, never invented, never auto-applied — ACCEPT flips a status only).
+New reject-with-reason inline row + per-platform char counter / autosizing textarea /
+VS ORIGINAL toggle in the approval queue. `components/IdentityCalibrationPanel.tsx` replaces
+`ProposalsPanel`. New `PATCH /api/proposals/[id]` (session lane, pending-only → 409). Export
+carries `targetType` / `targetRef` (additive, `version` stays 1). Verify:
+`npm run verify:identity-calibration -- --url <base>`. Full changelog:
+`docs/changelogs/identity-calibration.md`.

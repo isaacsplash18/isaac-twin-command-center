@@ -7,6 +7,7 @@
 import { PLATFORM_EVENT_NAMES } from "./config";
 import { readItemBody, toContentItem, platformFromPage } from "./items";
 import { CalibrationPlatform, CalibrationSource, logCalibrationEvent } from "./calibration-events";
+import { maybeCreateAmendmentFromDraftEvent } from "./proposals";
 import {
   buildStatusUpdate,
   getPage,
@@ -107,7 +108,7 @@ export async function rejectItem(pageId: string, source: CalibrationSource = "co
   await logEvent({ event: "Rejected", platform: PLATFORM_EVENT_NAMES[p.key], itemUrl: page.url }).catch((err) =>
     console.warn("logEvent (Rejected) failed — action already applied:", err)
   );
-  await logCalibrationEvent({
+  const rejectEvent = await logCalibrationEvent({
     source,
     action: "reject",
     objectType: "draft",
@@ -116,6 +117,10 @@ export async function rejectItem(pageId: string, source: CalibrationSource = "co
     topic: readTitle(page),
     rawUserText: reason,
   });
+  // Identity Calibration: a rejection WITH a reason becomes a pending
+  // unclassified amendment (no reason → no amendment). Fire-and-forget safe —
+  // the reject already committed; generation never throws.
+  await maybeCreateAmendmentFromDraftEvent(rejectEvent);
   return { ok: true };
 }
 
@@ -169,7 +174,7 @@ export async function editItem(pageId: string, newText: string, source: Calibrat
     }
     await writeBody(pageId, newText);
   }
-  await logCalibrationEvent({
+  const editEvent = await logCalibrationEvent({
     source,
     action: "edit",
     objectType: "draft",
@@ -180,6 +185,10 @@ export async function editItem(pageId: string, newText: string, source: Calibrat
     newText,
     rawUserText: newText,
   });
+  // Identity Calibration: a draft edit becomes a pending voice amendment
+  // (proposedText = the new body). Fire-and-forget safe — the edit already
+  // committed; generation never throws.
+  await maybeCreateAmendmentFromDraftEvent(editEvent);
   return { ok: true, body: newText };
 }
 

@@ -1,10 +1,16 @@
 "use client";
 
 import { AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FrameCard } from "./FrameCard";
 import { postAction } from "./useApi";
 import { ContentItem, PLATFORM_TABS, PlatformKey, formatSgt, twinPulse } from "./types";
+
+/** Per-platform char limits: X is a hard 280 (over → oxbright); LinkedIn a soft 3000 (over → amber). */
+const CHAR_LIMITS: Partial<Record<PlatformKey, { limit: number; hard: boolean }>> = {
+  x: { limit: 280, hard: true },
+  linkedin: { limit: 3000, hard: false },
+};
 
 /**
  * Home-screen approval queue (PRD §7.1): stacked cards, newest first,
@@ -82,8 +88,21 @@ function DraftCard({
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(item.body);
   const [busy, setBusy] = useState<null | "approve" | "reject" | "save">(null);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState("");
+  const [showOriginal, setShowOriginal] = useState(false);
+  const taRef = useRef<HTMLTextAreaElement>(null);
 
-  const act = async (kind: "approve" | "reject") => {
+  // Autosize the edit textarea to its content (no fixed rows, no scrollbars).
+  useEffect(() => {
+    const el = taRef.current;
+    if (editing && el) {
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    }
+  }, [editing, text]);
+
+  const act = async (kind: "approve" | "reject", rejectReason?: string) => {
     setBusy(kind);
     if (kind === "approve") {
       // Copy while still inside the tap gesture (clipboard API requirement),
@@ -98,7 +117,10 @@ function DraftCard({
       twinPulse("approve");
     }
     onRemoved(item.id); // optimistic — card leaves immediately
-    const res = await postAction(`/api/items/${item.id}/${kind}`);
+    const res = await postAction(
+      `/api/items/${item.id}/${kind}`,
+      kind === "reject" && rejectReason ? { reason: rejectReason } : undefined
+    );
     if (!res.ok) {
       twinPulse("error");
       onError(item.id, item, res.error ?? `${kind} failed`);
@@ -119,7 +141,18 @@ function DraftCard({
     }
   };
 
-  const charCount = item.platform === "x" ? text.length : null;
+  const cancelReject = () => {
+    setRejecting(false);
+    setReason("");
+  };
+
+  const limitDef = CHAR_LIMITS[item.platform];
+  const over = limitDef ? text.length > limitDef.limit : false;
+  const counterClass = !over
+    ? "text-ink-dim/70"
+    : limitDef?.hard
+      ? "text-oxbright"
+      : "text-amber";
 
   return (
     <FrameCard index={index} sweep className="p-4 sm:p-5">
@@ -137,13 +170,34 @@ function DraftCard({
       )}
 
       {editing ? (
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={Math.max(4, text.split("\n").length + 1)}
-          className="mt-3 w-full resize-y border border-hairline bg-ground p-3 font-serif text-[15px] leading-relaxed text-ink focus:border-ink/40 focus:outline-none"
-          autoFocus
-        />
+        <>
+          {item.originalDraft && (
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowOriginal((v) => !v)}
+                className="flex min-h-11 items-center border border-hairline px-2 py-0.5 font-mono text-[10px] tracking-wider text-ink-dim hover:text-ink sm:min-h-0"
+              >
+                {showOriginal ? "HIDE ORIGINAL" : "VS ORIGINAL"}
+              </button>
+            </div>
+          )}
+          {showOriginal && item.originalDraft && (
+            <div className="mt-2 border border-hairline-faint bg-ground/40 p-3">
+              <div className="font-mono text-[9px] tracking-[0.2em] text-ink-dim/70">ORIGINAL DRAFT</div>
+              <div className="mt-1 whitespace-pre-wrap break-words font-serif text-sm leading-relaxed text-ink-dim">
+                {item.originalDraft}
+              </div>
+            </div>
+          )}
+          <textarea
+            ref={taRef}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            className="mt-3 w-full resize-none overflow-hidden border border-hairline bg-ground p-3 font-serif text-[15px] leading-relaxed text-ink focus:border-ink/40 focus:outline-none"
+            autoFocus
+          />
+        </>
       ) : (
         // The content is the hero — Newsreader, reads like writing (PRD §5.2)
         <div className="mt-3 whitespace-pre-wrap break-words font-serif text-[15px] leading-relaxed text-ink">{item.body}</div>
@@ -159,9 +213,9 @@ function DraftCard({
       )}
 
       <div className="mt-2 flex items-center justify-between">
-        {charCount != null ? (
-          <span className={`font-mono text-[10px] ${charCount > 280 ? "text-oxbright" : "text-ink-dim/70"}`}>
-            {charCount} CH
+        {limitDef ? (
+          <span className={`font-mono text-[10px] ${counterClass}`}>
+            {text.length} / {limitDef.limit} CH
           </span>
         ) : (
           <span />
@@ -198,6 +252,45 @@ function DraftCard({
               CANCEL
             </button>
           </>
+        ) : rejecting ? (
+          // Inline reject-with-reason row (one extra tap max). The reason
+          // becomes a pending unclassified amendment; SKIP rejects with none.
+          // Escape or focus leaving the row cancels.
+          <div
+            className="flex w-full gap-2"
+            onBlur={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) cancelReject();
+            }}
+          >
+            <input
+              type="text"
+              value={reason}
+              autoFocus
+              placeholder="Why? (optional — becomes a calibration signal)"
+              onChange={(e) => setReason(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") cancelReject();
+                if (e.key === "Enter") act("reject", reason.trim() || undefined);
+              }}
+              className="min-h-11 min-w-0 flex-1 border border-hairline bg-ground px-3 py-2 font-mono text-xs text-ink placeholder:text-ink-dim/50 focus:border-ink/40 focus:outline-none sm:min-h-0"
+            />
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => act("reject", reason.trim() || undefined)}
+              className="flex min-h-11 items-center justify-center border border-oxbright/60 bg-oxblood/30 px-3 py-2 font-mono text-xs tracking-[0.15em] text-ink hover:bg-oxblood/50 disabled:opacity-50 sm:min-h-0"
+            >
+              REJECT
+            </button>
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => act("reject")}
+              className="flex min-h-11 items-center justify-center border border-hairline px-3 py-2 font-mono text-xs tracking-[0.15em] text-ink-dim hover:text-ink disabled:opacity-50 sm:min-h-0"
+            >
+              SKIP
+            </button>
+          </div>
         ) : (
           <>
             <button
@@ -211,7 +304,7 @@ function DraftCard({
             <button
               type="button"
               disabled={busy !== null}
-              onClick={() => act("reject")}
+              onClick={() => setRejecting(true)}
               className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink-dim hover:text-ink disabled:opacity-50 sm:min-h-0"
             >
               REJECT

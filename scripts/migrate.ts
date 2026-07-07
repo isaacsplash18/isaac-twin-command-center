@@ -16,7 +16,9 @@
  *    its data source id for DS_CALIBRATION_EVENTS.
  * 5. Creates the "Position Proposals" DB under the Constitution hub if
  *    missing (Phase 4 — see docs/hermes-calibration-plan.md §4.2) and prints
- *    its data source id for DS_PROPOSALS.
+ *    its data source id for DS_PROPOSALS. Also runs an additive property-patch
+ *    pass (Identity Calibration) that adds `Target Type` / `Target Ref` to an
+ *    ALREADY-EXISTING proposals DB — mirroring the content-DB NEW_PROPS pass.
  */
 
 import "dotenv/config";
@@ -76,6 +78,24 @@ const NEW_PROPS: Record<string, Json> = {
 };
 
 const STATUS_OPTIONS = ["Draft", "Approved", "Queued", "Posted", "Rejected"];
+
+// Identity Calibration — additive props patched onto an ALREADY-EXISTING
+// Position Proposals DB (the DB predates these). Reader semantics: a row with
+// no Target Type reads back as "position" (back-compat). See lib/proposals.ts.
+const PROPOSAL_NEW_PROPS: Record<string, Json> = {
+  "Target Type": {
+    select: {
+      options: [
+        { name: "position" },
+        { name: "voice" },
+        { name: "constitution" },
+        { name: "workflow" },
+        { name: "unclassified" },
+      ],
+    },
+  },
+  "Target Ref": { rich_text: {} },
+};
 
 async function migrateContentDs(env: string, label: string) {
   const id = process.env[env];
@@ -307,6 +327,24 @@ async function ensurePositionProposalsDb(): Promise<void> {
     (ds: Json) => ((ds.title ?? []).map((t: Json) => t.plain_text).join("") || "").trim() === "Position Proposals"
   );
   if (existing) {
+    // Additive property-patch pass (Identity Calibration): the DB already
+    // exists, so add Target Type / Target Ref if missing — mirrors the
+    // content-DB NEW_PROPS pass. Never renames or removes anything.
+    const dsFull = await notion(`/data_sources/${existing.id}`);
+    const props: Json = dsFull.properties ?? {};
+    const toAdd: Record<string, Json> = {};
+    for (const [name, def] of Object.entries(PROPOSAL_NEW_PROPS)) {
+      const has = Object.keys(props).find((k) => k.toLowerCase() === name.toLowerCase());
+      if (has) console.log(`  = "${name}" already present`);
+      else toAdd[name] = def;
+    }
+    if (Object.keys(toAdd).length > 0) {
+      await notion(`/data_sources/${existing.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ properties: toAdd }),
+      });
+      console.log(`  + added: ${Object.keys(toAdd).join(", ")}`);
+    }
     console.log(`  = Already exists. DS_PROPOSALS=${existing.id}`);
     return;
   }
@@ -340,6 +378,8 @@ async function ensurePositionProposalsDb(): Promise<void> {
               ],
             },
           },
+          // Identity Calibration additive props (also patched onto existing DBs above).
+          ...PROPOSAL_NEW_PROPS,
         },
       },
     }),

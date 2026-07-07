@@ -15,6 +15,8 @@ export interface ContentItem {
   scheduledAt: string | null;
   approvedAt: string | null;
   editedBeforeApproval: boolean;
+  /** Snapshot of the pre-edit body, null when never edited. Drives the VS ORIGINAL toggle. */
+  originalDraft: string | null;
   typefullyId: string | null;
   inCanva: boolean;
 }

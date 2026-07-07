@@ -38,6 +38,8 @@ export interface ContentItem {
   scheduledAt: string | null;
   approvedAt: string | null;
   editedBeforeApproval: boolean;
+  /** Snapshot of the pre-edit body ("Original Draft" prop), null when never edited. */
+  originalDraft: string | null;
   typefullyId: string | null;
   inCanva: boolean;
 }
@@ -83,6 +85,7 @@ export async function toContentItem(page: NotionPage, p: PlatformConfig, withBod
     scheduledAt: readDateProp(page, "Scheduled At"),
     approvedAt: readDateProp(page, "Approved At"),
     editedBeforeApproval: readCheckboxProp(page, "Edited Before Approval"),
+    originalDraft: readRichTextProp(page, "Original Draft") || null,
     typefullyId: readRichTextProp(page, "Typefully ID") || null,
     inCanva: readSelectProp(page, "Status") === "In Canva",
   };
