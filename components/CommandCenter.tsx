@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApprovalQueue } from "./ApprovalQueue";
 import { BootSequence } from "./BootSequence";
@@ -13,6 +14,13 @@ import { AutomationsPanel, InputsPanel, PositionsPanel } from "./SidePanels";
 import { Ticker } from "./Ticker";
 import { postAction, useApi } from "./useApi";
 import { ContentItem, PanelsData, PlatformKey, QueueData, formatSgt, twinPulse } from "./types";
+
+// The one WebGL liquid-metal moment (liquid-glass plan §3.5) — lazy so the
+// shaders chunk never lands in the main bundle / SSR output.
+const LiquidSigil = dynamic(() => import("./LiquidSigil"), {
+  ssr: false,
+  loading: () => <span style={{ width: 28, height: 28, display: "inline-block" }} />,
+});
 
 export function CommandCenter() {
   const queue = useApi<QueueData>("/api/queue", 60_000);
@@ -153,7 +161,7 @@ export function CommandCenter() {
       <CommandPalette actions={paletteActions} />
 
       {/* Header */}
-      <header className="flex items-center justify-between gap-4 border-b border-hairline bg-panel/80 px-4 py-3 sm:px-6">
+      <header className="glass relative overflow-hidden flex items-center justify-between gap-4 border-b border-hairline px-4 py-3 sm:px-6">
         <div className="min-w-0">
           <h1 className="truncate font-sans text-sm font-semibold tracking-wide text-ink sm:text-base">
             ISAAC TWIN <span className="text-ink-dim">// COMMAND CENTER</span>
@@ -163,6 +171,7 @@ export function CommandCenter() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <LiquidSigil size={28} />
           <button
             type="button"
             onClick={async () => {
@@ -260,7 +269,10 @@ export function CommandCenter() {
       {/* Toasts */}
       <div className="pointer-events-none fixed bottom-4 left-1/2 z-[95] flex w-full max-w-sm -translate-x-1/2 flex-col gap-2 px-4">
         {toasts.map((t) => (
-          <div key={t.id} className="pointer-events-auto border border-oxbright/50 bg-panel px-4 py-2.5 shadow-xl">
+          <div
+            key={t.id}
+            className="glass pointer-events-auto relative overflow-hidden border border-oxbright/50 px-4 py-2.5 shadow-xl"
+          >
             <p className="break-words font-mono text-xs text-ink">{t.message}</p>
           </div>
         ))}

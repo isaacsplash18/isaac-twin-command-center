@@ -1,10 +1,19 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 
 const BOOT_KEY = "twin-booted";
 const BOOT_LINE = "ISAAC TWIN // COMMAND CENTER — systems nominal";
+
+// The one WebGL liquid-metal moment (liquid-glass plan §3.5) — lazy so the
+// shaders chunk stays out of the main bundle/SSR; this canvas mounts for
+// <1.2s and unmounts with the boot overlay.
+const LiquidSigil = dynamic(() => import("./LiquidSigil"), {
+  ssr: false,
+  loading: () => <span style={{ width: 160, height: 160, display: "inline-block" }} />,
+});
 
 /**
  * Signature element #1 (PRD §5.3): first load per session only, ≤1.2s,
@@ -46,6 +55,9 @@ export function BootSequence() {
           exit={{ opacity: 0, transition: { duration: 0.2 } }}
         >
           <div className="w-full max-w-md px-6">
+            <div className="mx-auto mb-4 flex justify-center">
+              <LiquidSigil size={160} />
+            </div>
             <motion.div
               className="h-px w-full origin-left bg-oxbright/70"
               initial={{ scaleX: 0 }}

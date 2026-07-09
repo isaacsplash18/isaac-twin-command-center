@@ -22,6 +22,7 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
   const [size, setSize] = useState(400);
   const [reduced, setReduced] = useState(false);
   const figureRef = useRef<HTMLDivElement | null>(null);
+  const specRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setReduced(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
@@ -69,6 +70,13 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
       const rgb = red ? "220,40,40" : OXBRIGHT;
       fig.style.filter = `drop-shadow(0 0 ${7 + 15 * glowV}px rgba(${rgb},${0.08 + 0.3 * glowV}))`;
       fig.style.transform = `perspective(800px) rotateY(${yaw}deg) translateX(${shudder}px)`;
+      // liquid-glass specular sweep — tracks the same yaw, blooms on approve
+      // (glowV rides the existing glow easing, no new state/loop needed).
+      // Reduced motion: flat opacity, no transform (loop already short-circuits).
+      if (specRef.current) {
+        specRef.current.style.transform = reduced ? "translateX(0%)" : `translateX(${yaw * 2.2}%)`;
+        specRef.current.style.opacity = reduced ? "0.12" : String(0.12 + 0.5 * glowV);
+      }
     };
 
     const tick = (t: number) => {
@@ -147,6 +155,21 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
               style={{
                 backgroundImage: "repeating-linear-gradient(0deg, rgba(25,26,28,0.05) 0 1px, transparent 1px 4px)",
                 mixBlendMode: "multiply",
+              }}
+            />
+            {/* liquid-glass specular sweep — clipped to her silhouette by the
+                mask, driven by the yaw the pointer loop above already
+                computes; blooms on approve, flat under reduced-motion. */}
+            <div
+              ref={specRef}
+              className="absolute inset-0"
+              style={{
+                background:
+                  "linear-gradient(105deg, rgba(255,255,255,0) 38%, rgba(255,255,255,0.55) 50%, rgba(255,255,255,0) 62%)",
+                mixBlendMode: "screen",
+                opacity: 0,
+                transform: "translateX(0%)",
+                willChange: "transform, opacity",
               }}
             />
           </div>

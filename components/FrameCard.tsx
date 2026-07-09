@@ -14,12 +14,17 @@ export function FrameCard({
   index = 0,
   className = "",
   sweep = false,
+  glass = true,
 }: {
   children: ReactNode;
   index?: number;
   className?: string;
   /** When true the exit animation is the oxblood approve sweep. */
   sweep?: boolean;
+  /** Frosted liquid-glass finish (liquid-glass plan §3.2). Default on;
+   *  the single kill switch for panel glass app-wide — set false to fall
+   *  back to opaque clay on any given card, or flip the default here. */
+  glass?: boolean;
 }) {
   const reduced = useReducedMotion();
   const delay = reduced ? 0 : Math.min(index, 12) * 0.04;
@@ -35,7 +40,7 @@ export function FrameCard({
           ? { opacity: 0, transition: { duration: 0.1 } }
           : { opacity: 0, x: sweep ? 20 : 0, transition: { duration: 0.22, ease: "easeIn" } }
       }
-      className={`relative overflow-hidden bg-panel ${className}`}
+      className={`relative overflow-hidden ${glass ? "glass" : "bg-panel"} ${className}`}
     >
       {/* Border trace: top → right, left → bottom */}
       <motion.span aria-hidden className="absolute left-0 top-0 h-px w-full origin-left bg-hairline"

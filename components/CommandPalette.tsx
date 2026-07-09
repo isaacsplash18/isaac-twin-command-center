@@ -86,7 +86,7 @@ export function CommandPalette({ actions }: { actions: PaletteAction[] }) {
           onClick={() => setOpen(false)}
         >
           <motion.div
-            className="w-full max-w-lg border border-hairline bg-panel shadow-2xl"
+            className="glass relative w-full max-w-lg overflow-hidden border border-hairline shadow-2xl"
             initial={{ y: -8, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ duration: 0.15 }}

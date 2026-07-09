@@ -21,6 +21,66 @@
   --font-sans: var(--font-grotesk), system-ui, sans-serif;
   --font-serif: var(--font-newsreader), Georgia, serif;
   --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+
+  /* glass tokens (additive — existing tokens unchanged) */
+  --glass-tint: 232 232 227; /* = panel #E8E8E3 as RGB channels */
+  --glass-alpha: 0.62; /* panel translucency on desktop */
+  --glass-blur: 16px;
+  --glass-saturate: 1.4;
+  --glass-specular: rgba(255, 255, 255, 0.65); /* top-edge highlight */
+  --glass-edge: rgba(25, 26, 28, 0.06); /* refraction hairline */
+}
+
+/* Frosted instrument glass. Applied by FrameCard's root (and header/ticker/
+   palette/toasts — the non-FrameCard surfaces, §3.4 of the liquid-glass plan). */
+.glass {
+  /* CSS Color 4 space/slash syntax — required here: the plan's literal
+     `rgba(var(--glass-tint), var(--glass-alpha))` mixes comma and
+     space-separated color syntax, which is invalid and computes to
+     transparent (verified in-browser: backdrop-filter applied, background
+     stayed rgba(0,0,0,0)). `rgb(var(--tint) / var(--alpha))` is the correct
+     form for a space-separated channel triplet + a separately-toggled alpha
+     custom property, and is the same visual value the plan specifies. */
+  background: rgb(var(--glass-tint) / var(--glass-alpha));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow:
+    inset 0 1px 0 var(--glass-specular), /* specular top edge */
+    inset 0 0 0 1px var(--glass-edge), /* refraction hairline */
+    0 1px 2px rgba(25, 26, 28, 0.04),
+    0 10px 28px -14px rgba(25, 26, 28, 0.14); /* float */
+}
+/* faint diagonal sheen — the "wet" read; pointer-events:none */
+.glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 38%);
+  mix-blend-mode: screen;
+}
+
+/* No-backdrop-filter fallback (old browsers): opaque clay, no glass. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass {
+    background: var(--color-panel);
+  }
+}
+
+/* Mobile perf: cheaper frost so many simultaneous panels don't jank iOS. */
+@media (max-width: 640px) {
+  .glass {
+    --glass-blur: 8px;
+    --glass-alpha: 0.78;
+    --glass-saturate: 1.2;
+  }
+}
+
+/* Reduced motion: kill the sheen (static), keep the frost. */
+@media (prefers-reduced-motion: reduce) {
+  .glass::after {
+    display: none;
+  }
 }
 
 /* Faint 8px grid on the ground, ≤3% opacity — instrument panel, not neon. */

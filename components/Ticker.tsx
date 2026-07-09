@@ -19,7 +19,10 @@ export function Ticker({ lines }: { lines: string[] }) {
   const line = lines[idx % lines.length];
 
   return (
-    <div className="border-b border-hairline-faint bg-panel/60 px-4 py-1.5 sm:px-6">
+    <div
+      className="glass relative overflow-hidden border-b border-hairline-faint px-4 py-1.5 sm:px-6"
+      style={{ ["--glass-alpha" as string]: "0.5", ["--glass-blur" as string]: "10px" }}
+    >
       <p key={line} className="ticker-item truncate font-mono text-[11px] tracking-wide text-ink-dim">
         {line}
       </p>
