@@ -17,13 +17,34 @@ export interface PlatformConfig {
 /**
  * Publishing mode: with no TYPEFULLY_API_KEY (or PUBLISH_MODE=manual) every
  * platform uses the manual copy-paste lane — Approve → COPY → Mark Posted.
- * Setting a Typefully key re-enables zero-touch publishing for X/LinkedIn.
+ * Setting a Typefully key re-enables zero-touch publishing, scoped to the
+ * platforms listed in TYPEFULLY_PLATFORMS (default X only — LinkedIn stays
+ * manual until Isaac explicitly opts it in).
  */
 export const TYPEFULLY_ENABLED = !!process.env.TYPEFULLY_API_KEY && process.env.PUBLISH_MODE !== "manual";
 
+/** Pure so verify scripts can exercise the parsing without mutating process.env. */
+export function parseTypefullyPlatforms(raw: string | undefined): Set<string> {
+  if (!raw || !raw.trim()) return new Set(["x"]);
+  return new Set(
+    raw
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+export const TYPEFULLY_PLATFORMS = parseTypefullyPlatforms(process.env.TYPEFULLY_PLATFORMS);
+
 export const PLATFORMS: PlatformConfig[] = [
-  { key: "x", label: "X", dsEnv: "DS_X", autoPublish: TYPEFULLY_ENABLED, bodyInPageContent: true },
-  { key: "linkedin", label: "LinkedIn", dsEnv: "DS_LINKEDIN", autoPublish: TYPEFULLY_ENABLED, bodyInPageContent: true },
+  { key: "x", label: "X", dsEnv: "DS_X", autoPublish: TYPEFULLY_ENABLED && TYPEFULLY_PLATFORMS.has("x"), bodyInPageContent: true },
+  {
+    key: "linkedin",
+    label: "LinkedIn",
+    dsEnv: "DS_LINKEDIN",
+    autoPublish: TYPEFULLY_ENABLED && TYPEFULLY_PLATFORMS.has("linkedin"),
+    bodyInPageContent: true,
+  },
   {
     key: "ig-story",
     label: "IG Story",

@@ -115,7 +115,11 @@ export async function GET(req: NextRequest) {
       events,
       proposals: { pending, accepted },
       drafts: { pendingReview },
-      publisher: { mode: TYPEFULLY_ENABLED ? "typefully" : "manual", failures24h },
+      publisher: {
+        mode: TYPEFULLY_ENABLED ? "typefully" : "manual",
+        failures24h,
+        autoPlatforms: PLATFORMS.filter((p) => p.autoPublish).map((p) => p.key),
+      },
       warnings,
     });
   } catch (err) {

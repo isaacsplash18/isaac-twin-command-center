@@ -149,7 +149,11 @@ curl -s \
   // Derived the same way as lib/config.ts's TYPEFULLY_ENABLED: "typefully"
   // when TYPEFULLY_API_KEY is set (and PUBLISH_MODE != "manual"), else
   // "manual". The key itself is never included in this or any response.
-  "publisher": { "mode": "manual" },
+  // autoPlatforms is additive (version unchanged): platform keys whose
+  // PLATFORMS entry has autoPublish === true right now — i.e.
+  // TYPEFULLY_ENABLED and included in TYPEFULLY_PLATFORMS (default ["x"]).
+  // Empty array in manual mode.
+  "publisher": { "mode": "manual", "autoPlatforms": [] },
 
   // Non-fatal notices about lanes that returned empty/zero because an env
   // var isn't configured yet (or a DB isn't migrated). Empty array when
@@ -190,6 +194,10 @@ curl -s \
   auto-publish via Typefully is live. Either way, publishing always requires
   prior human approval of the draft (§8 constraint 4 in the plan / guardrail
   1–2 in the build brief) — this field is status only, not a control.
+- **`publisher.autoPlatforms`** — which platforms are actually auto-publishing right
+  now (`"typefully"` mode is account-wide but `TYPEFULLY_PLATFORMS` scopes it
+  per platform; default is X only, so `publisher.mode: "typefully"` does not
+  imply LinkedIn auto-publishes).
 - **`warnings`** — always an array (possibly empty). Each entry names the
   specific env var or lane that's unconfigured. This lets Hermes distinguish
   "genuinely zero events" from "the events lane isn't wired up yet."
@@ -633,6 +641,9 @@ than adding new machinery.
 ### Turning zero-touch publishing on (later)
 
 Set `TYPEFULLY_API_KEY` (and optionally `TYPEFULLY_SOCIAL_SET_ID`) in Vercel.
-Slots: X daily 08:30 SGT, LinkedIn Mon/Wed/Fri 09:00 SGT. Before enabling,
-update the Sunday cleanup automation so it skips `Queued` items (standing
-coordination note from the Command Center build).
+`TYPEFULLY_PLATFORMS` scopes which platforms actually auto-publish once the
+key is set — default `"x"`, so LinkedIn stays in the manual copy-paste lane
+until it's explicitly added (e.g. `TYPEFULLY_PLATFORMS=x,linkedin`). Slots: X
+daily 08:30 SGT, LinkedIn Mon/Wed/Fri 09:00 SGT. Before enabling, update the
+Sunday cleanup automation so it skips `Queued` items (standing coordination
+note from the Command Center build).

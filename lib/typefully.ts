@@ -31,6 +31,19 @@ async function tfFetch(path: string, init?: RequestInit): Promise<Json> {
   return res.json();
 }
 
+export interface SocialSet {
+  id: string;
+  name: string;
+}
+
+/** First page of social sets on the account (id + name) — diagnostics/verify use only. */
+export async function listSocialSets(): Promise<SocialSet[]> {
+  const resp = await tfFetch(`/v2/social-sets`);
+  const sets = resp.results ?? resp;
+  if (!Array.isArray(sets)) return [];
+  return sets.map((s: Json) => ({ id: String(s.id), name: String(s.name ?? "") }));
+}
+
 let cachedSocialSetId: string | null = null;
 
 export async function getSocialSetId(): Promise<string> {
@@ -89,11 +102,19 @@ export interface DraftState {
   publishedUrl: string | null;
 }
 
+/**
+ * Normalizes both the legacy `status` field and the current API's
+ * `publish_state` field (which reaches "finished" once publishing
+ * completes) into the single `status` shape lib/publisher.ts expects.
+ */
 export async function getDraftState(draftId: string): Promise<DraftState> {
   const socialSetId = await getSocialSetId();
   const d = await tfFetch(`/v2/social-sets/${socialSetId}/drafts/${draftId}`);
+  const legacyStatus = String(d.status ?? "").toLowerCase();
+  const publishState = String(d.publish_state ?? "").toLowerCase();
+  const status = legacyStatus === "published" || publishState === "finished" ? "published" : legacyStatus || publishState;
   return {
-    status: String(d.status ?? "").toLowerCase(),
+    status,
     publishedUrl: d.x_published_url ?? d.linkedin_published_url ?? null,
   };
 }

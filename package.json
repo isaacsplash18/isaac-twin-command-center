@@ -15,6 +15,7 @@
     "verify:draft-bridge": "tsx scripts/verify-draft-bridge.ts",
     "verify:telegram-decisions": "tsx scripts/verify-telegram-decisions.ts",
     "verify:identity-calibration": "tsx scripts/verify-identity-calibration.ts",
+    "verify:typefully": "tsx scripts/verify-typefully.ts",
     "export:twin": "tsx scripts/export-twin-context.ts"
   },
   "dependencies": {
