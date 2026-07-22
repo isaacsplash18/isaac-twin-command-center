@@ -120,81 +120,91 @@ export function NovaStage({
       <Nova mood={asking ? "neutral" : mood} line={line} />
 
       {asking && q && (
-        // The question floats over the hologram's lower half — Nova is asking.
-        <div className="relative z-10 -mt-16 w-full max-w-xl border border-hairline bg-panel/90 p-4 shadow-[0_0_40px_rgba(0,0,0,0.6)] sm:-mt-40 sm:p-5">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="font-mono text-[9px] tracking-[0.25em] text-oxbright">
-              CALIBRATION · {open.length} LEFT THIS ROUND
-            </span>
-            {q.tag && (
-              <span
-                className={`font-mono text-[9px] tracking-wider ${
-                  q.tag.toLowerCase() === "contested" ? "text-oxbright" : "text-amber"
-                }`}
-              >
-                {q.tag.toUpperCase()}
+        // The question floats over the hologram's lower half — Nova is
+        // asking. Nova is now fluid-width (no fixed px size), so a fixed
+        // negative margin can't track her height across screen sizes; `top`
+        // as a percentage resolves against the containing block's *height*
+        // (unlike margin, which resolves against width), so it scales
+        // correctly at any width. 83%/68% match where the old -mt-16/-mt-40
+        // landed against her previous fixed-size box.
+        <div className="absolute inset-x-0 top-[83%] z-10 flex justify-center px-4 sm:top-[68%]">
+          <div className="w-full max-w-xl border border-hairline bg-panel/90 p-4 shadow-[0_0_40px_rgba(0,0,0,0.6)] sm:p-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <span className="font-mono text-[9px] tracking-[0.25em] text-oxbright">
+                CALIBRATION · {open.length} LEFT THIS ROUND
               </span>
+              {q.tag && (
+                <span
+                  className={`font-mono text-[9px] tracking-wider ${
+                    q.tag.toLowerCase() === "contested" ? "text-oxbright" : "text-amber"
+                  }`}
+                >
+                  {q.tag.toUpperCase()}
+                </span>
+              )}
+            </div>
+
+            <h3 className="mt-1.5 break-words text-base font-semibold text-ink">{q.title}</h3>
+            {q.guess && (
+              <p className="mt-1.5 break-words font-serif text-[14px] leading-relaxed text-ink">{q.guess}</p>
             )}
-          </div>
+            {q.why && <p className="mt-1.5 break-words text-xs leading-relaxed text-ink-dim">{q.why}</p>}
 
-          <h3 className="mt-1.5 break-words text-base font-semibold text-ink">{q.title}</h3>
-          {q.guess && <p className="mt-1.5 break-words font-serif text-[14px] leading-relaxed text-ink">{q.guess}</p>}
-          {q.why && <p className="mt-1.5 break-words text-xs leading-relaxed text-ink-dim">{q.why}</p>}
+            <div className="mt-3 flex flex-wrap items-center gap-px">
+              {VERDICTS.map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setVerdict(verdict === v ? null : v)}
+                  className={`flex min-h-11 items-center justify-center px-3 py-1.5 font-mono text-[11px] tracking-[0.15em] transition-colors sm:min-h-0 sm:text-[10px] ${
+                    verdict === v
+                      ? v === "Reject"
+                        ? "border border-oxbright/60 bg-oxblood/30 text-ink"
+                        : "border border-ink/40 bg-ink/10 text-ink"
+                      : "border border-hairline text-ink-dim hover:text-ink"
+                  }`}
+                >
+                  {v.toUpperCase()}
+                </button>
+              ))}
+              {q.positionUrl && (
+                <a
+                  href={q.positionUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="ml-auto font-mono text-[9px] tracking-wider text-ink-dim underline decoration-hairline underline-offset-4 hover:text-ink"
+                >
+                  POSITION ↗
+                </a>
+              )}
+            </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-px">
-            {VERDICTS.map((v) => (
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Your real view, in your own words. Messy is fine."
+              rows={3}
+              className="mt-2 w-full resize-y border border-hairline bg-ground p-3 font-serif text-[14px] leading-relaxed text-ink placeholder:text-ink-dim/50 focus:border-ink/40 focus:outline-none"
+            />
+
+            <div className="mt-2 flex gap-2">
               <button
-                key={v}
                 type="button"
-                onClick={() => setVerdict(verdict === v ? null : v)}
-                className={`flex min-h-11 items-center justify-center px-3 py-1.5 font-mono text-[11px] tracking-[0.15em] transition-colors sm:min-h-0 sm:text-[10px] ${
-                  verdict === v
-                    ? v === "Reject"
-                      ? "border border-oxbright/60 bg-oxblood/30 text-ink"
-                      : "border border-ink/40 bg-ink/10 text-ink"
-                    : "border border-hairline text-ink-dim hover:text-ink"
-                }`}
+                disabled={busy}
+                onClick={submit}
+                className="flex min-h-11 flex-1 items-center justify-center border border-oxbright/60 bg-oxblood/30 px-4 py-2.5 font-mono text-xs tracking-[0.2em] text-ink hover:bg-oxblood/50 active:bg-oxblood/70 disabled:opacity-50 sm:min-h-0"
               >
-                {v.toUpperCase()}
+                {busy ? "CALIBRATING…" : "SUBMIT"}
               </button>
-            ))}
-            {q.positionUrl && (
-              <a
-                href={q.positionUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="ml-auto font-mono text-[9px] tracking-wider text-ink-dim underline decoration-hairline underline-offset-4 hover:text-ink"
+              <button
+                type="button"
+                disabled={busy}
+                onClick={skip}
+                className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink-dim hover:text-ink disabled:opacity-50 sm:min-h-0"
               >
-                POSITION ↗
-              </a>
-            )}
-          </div>
-
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Your real view, in your own words. Messy is fine."
-            rows={3}
-            className="mt-2 w-full resize-y border border-hairline bg-ground p-3 font-serif text-[14px] leading-relaxed text-ink placeholder:text-ink-dim/50 focus:border-ink/40 focus:outline-none"
-          />
-
-          <div className="mt-2 flex gap-2">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={submit}
-              className="flex min-h-11 flex-1 items-center justify-center border border-oxbright/60 bg-oxblood/30 px-4 py-2.5 font-mono text-xs tracking-[0.2em] text-ink hover:bg-oxblood/50 active:bg-oxblood/70 disabled:opacity-50 sm:min-h-0"
-            >
-              {busy ? "CALIBRATING…" : "SUBMIT"}
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={skip}
-              className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink-dim hover:text-ink disabled:opacity-50 sm:min-h-0"
-            >
-              LATER
-            </button>
+                LATER
+              </button>
+            </div>
           </div>
         </div>
       )}
