@@ -6,12 +6,13 @@ import { useEffect, useRef, useState } from "react";
  * NOVA — the twin's face: a looping holographic video (public/nova-hologram.mp4)
  * of her floating in a dark command center. The clip's own background is
  * opaque and dark, but the page ground is light, so the wrapper carries a
- * feathered mask (radial + a heavier bottom fade) that dissolves her edges
- * into the ground instead of showing a hard video rectangle — same trick the
- * old alpha-cutout portrait used, just driven by a mask gradient instead of
- * the PNG's own alpha channel. She breathes, tilts toward the cursor, blooms
- * oxblood on Approve and shudders red on failure. Pure CSS/DOM — no canvas,
- * no deps.
+ * feathered mask (a tall, figure-biased radial ellipse + a heavier bottom
+ * fade) that dissolves her edges into the ground on every side — no card,
+ * no frame, no visible rectangle — same trick the old alpha-cutout portrait
+ * used, just driven by a mask gradient instead of the PNG's own alpha
+ * channel. She breathes gently, blooms oxblood on Approve and shudders red
+ * on failure. Pure CSS/DOM — no canvas, no deps, no video processing (the
+ * clip itself stays fully opaque and untouched).
  */
 
 const OXBRIGHT = "166,27,28";
@@ -19,7 +20,6 @@ const OXBRIGHT = "166,27,28";
 export type NovaMood = "praise" | "sass" | "neutral";
 
 export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
-  const [size, setSize] = useState(400);
   const [reduced, setReduced] = useState(false);
   const figureRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -27,10 +27,6 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
   useEffect(() => {
     const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
     setReduced(mql.matches);
-    const measure = () => setSize(Math.min(430, window.innerWidth - 40));
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
   }, []);
 
   // Reduced motion: hold on a single frame instead of autoplaying — never
@@ -54,19 +50,12 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
     const fig = figureRef.current;
     if (!fig) return;
 
-    let yaw = 0;
     let glow = baseGlow;
     let glowTarget = baseGlow;
     let redUntil = 0;
     let shudderUntil = 0;
     let raf = 0;
 
-    const onPointer = (e: PointerEvent) => {
-      if (reduced) return;
-      const rect = fig.getBoundingClientRect();
-      const nx = (e.clientX - (rect.left + rect.width / 2)) / (rect.width / 2 || 1);
-      yaw = Math.max(-1, Math.min(1, nx)) * 7;
-    };
     const onPulse = (e: Event) => {
       const kind = (e as CustomEvent).detail;
       const now = performance.now();
@@ -77,13 +66,16 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
         glowTarget = 1;
       }
     };
-    window.addEventListener("pointermove", onPointer);
     window.addEventListener("twin-pulse", onPulse);
 
+    // No cursor-driven tilt here — just the mood glow and the error shudder.
+    // A perspective/rotateY transform was removed on purpose: it made the
+    // whole figure read as a rigid slab tilting toward the pointer (the
+    // "plate" look), which fought the feathered, edgeless framing below.
     const apply = (glowV: number, red: boolean, shudder: number) => {
       const rgb = red ? "220,40,40" : OXBRIGHT;
       fig.style.filter = `drop-shadow(0 0 ${10 + 20 * glowV}px rgba(${rgb},${0.1 + 0.35 * glowV}))`;
-      fig.style.transform = `perspective(900px) rotateY(${yaw}deg) translateX(${shudder}px)`;
+      fig.style.transform = `translateX(${shudder}px)`;
     };
 
     const tick = (t: number) => {
@@ -99,31 +91,48 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
 
     return () => {
       cancelAnimationFrame(raf);
-      window.removeEventListener("pointermove", onPointer);
       window.removeEventListener("twin-pulse", onPulse);
     };
   }, [baseGlow, reduced]);
 
-  // Feathered mask: fades all four edges (so the video rectangle never shows
-  // a hard line), with the bottom pulled in further so the calibration card
-  // in NovaStage overlaps a soft dissolve rather than a video edge.
+  // Feathered mask: a tall, figure-biased radial ellipse centered on her
+  // upper body reaches full transparency well before the frame edges, so no
+  // straight edge or corner ever shows — she dissolves into the ground
+  // instead of sitting inside a frame. Intersected with a top-to-bottom
+  // gradient whose fade starts around the midpoint, giving the bottom a
+  // heavier melt so the calibration card in NovaStage overlaps a soft
+  // dissolve rather than a video edge. Cropped loosely enough that her head
+  // and shoulders are never clipped — only the empty dark margins vanish.
   const featherMask =
-    "linear-gradient(to bottom, transparent 0%, black 14%, black 52%, transparent 92%)," +
-    "radial-gradient(ellipse 92% 88% at 50% 42%, black 62%, transparent 100%)";
+    "linear-gradient(to bottom, transparent 0%, black 12%, black 46%, transparent 86%)," +
+    "radial-gradient(ellipse 70% 84% at 50% 40%, black 52%, transparent 96%)";
 
   return (
-    <div className="flex flex-col items-center">
+    <div className="flex w-full flex-col items-center">
       <div
         ref={figureRef}
-        className="relative"
-        style={{ width: size, height: size * 1.15, willChange: "transform, filter" }}
+        className="relative w-full"
+        style={{
+          // Fluid width — fills whatever box she's given (full-bleed on
+          // mobile, the centre grid column on desktop) instead of a capped
+          // pixel size. Height rides the clip's portrait crop via
+          // aspect-ratio (same 1:1.15 proportion the old fixed px used, so
+          // the feather mask below needs no retuning — it's percentage-based
+          // and scales with the box). Capped at 90vh so a very wide desktop
+          // column doesn't produce an absurdly tall figure; object-fit:cover
+          // on the video means the cap never distorts or letterboxes her.
+          aspectRatio: "1 / 1.15",
+          maxHeight: "90vh",
+          willChange: "transform, filter",
+        }}
       >
-        <div style={reduced ? undefined : { animation: "nova-breathe 6s ease-in-out infinite" }}>
+        <div
+          className="h-full w-full"
+          style={reduced ? undefined : { animation: "nova-breathe 6s ease-in-out infinite" }}
+        >
           <div
-            className="relative overflow-hidden rounded-[28px]"
+            className="relative h-full w-full overflow-hidden"
             style={{
-              width: size,
-              height: size * 1.15,
               WebkitMaskImage: featherMask,
               maskImage: featherMask,
               WebkitMaskComposite: "source-in",

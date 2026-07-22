@@ -31,7 +31,13 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en-GB" className={`${grotesk.variable} ${newsreader.variable} ${plexMono.variable}`}>
-      <body className="bg-ground text-ink font-sans antialiased min-h-screen scanlines">{children}</body>
+      {/* overflow-x-hidden guards against the Nova full-bleed trick
+          (w-screen + -translate-x-1/2 in CommandCenter) tripping a 1px
+          horizontal scrollbar on desktop browsers where 100vw includes the
+          scrollbar gutter. */}
+      <body className="bg-ground text-ink font-sans antialiased min-h-screen overflow-x-hidden scanlines">
+        {children}
+      </body>
     </html>
   );
 }

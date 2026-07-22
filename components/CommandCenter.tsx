@@ -218,7 +218,15 @@ export function CommandCenter() {
             explicit track, the implicit column auto-sizes to its widest child
             (the calibration card's max-w-xl) and overflows the viewport. */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_minmax(0,1fr)_300px]">
-          <section aria-label="Nova" className="order-1 flex justify-center lg:order-2">
+          {/* Nova wants to be full-width: edge-to-edge on mobile (breaking out
+              of <main>'s p-4/sm:p-6 via the classic 100vw + -50%/translate
+              full-bleed trick — works regardless of the parent's padding or
+              max-width), and filling the centre grid column (not the whole
+              viewport) on lg+, where the side panels take the outer tracks. */}
+          <section
+            aria-label="Nova"
+            className="relative left-1/2 order-1 flex w-screen -translate-x-1/2 justify-center lg:static lg:order-2 lg:w-full lg:translate-x-0"
+          >
             <NovaStage mood={nova.mood} idleLine={nova.lines[novaIdx % nova.lines.length]} onToast={toast} />
           </section>
 
