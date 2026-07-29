@@ -83,12 +83,106 @@
   }
 }
 
-/* Faint 8px grid on the ground, ≤3% opacity — instrument panel, not neon. */
-.scanlines {
+/* Shimmering titanium ground. A surface *treatment on* --color-ground, not a
+   new colour scheme: the plate stays the base and the whole thing still reads
+   near-white. One class on <body> — remove it and the ground is plain plate.
+
+   Two fixed, pointer-events:none, z-index:-1 pseudo-layers sit behind all
+   content and therefore *inside* every .glass panel's backdrop sample, so the
+   metal shows through the frost rather than over it. They're fixed rather than
+   scrolling so the sweep is viewport-anchored (a scrolling sweep reads as a
+   moving object, not as light); fixed boxes also don't contribute to the
+   document's scrollable overflow, so nothing here can trip a scrollbar. */
+.titanium {
+  background-color: var(--color-ground);
+}
+
+/* Layer 1 — static brushed striations. Three repeating gradients at the same
+   97deg rake but with co-prime-ish periods (9/23/37px) and uneven stop spacing,
+   so the beat never resolves into a visible stripe pattern the way a single
+   fixed-period gradient would. Dark stops are 1.6–3% ink; the white stops read
+   as ~2% luminance lift against #F2F2EF, not as white lines. */
+.titanium::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background-image:
-    linear-gradient(rgba(25, 26, 28, 0.028) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(25, 26, 28, 0.028) 1px, transparent 1px);
-  background-size: 8px 8px;
+    repeating-linear-gradient(
+      97deg,
+      rgba(25, 26, 28, 0.030) 0px, rgba(25, 26, 28, 0.030) 1px,
+      transparent 1px, transparent 3px,
+      rgba(25, 26, 28, 0.016) 3px, rgba(25, 26, 28, 0.016) 4px,
+      transparent 4px, transparent 9px
+    ),
+    repeating-linear-gradient(
+      97deg,
+      rgba(255, 255, 255, 0.42) 0px, rgba(255, 255, 255, 0.42) 2px,
+      transparent 2px, transparent 8px,
+      rgba(255, 255, 255, 0.24) 8px, rgba(255, 255, 255, 0.24) 9px,
+      transparent 9px, transparent 23px
+    ),
+    repeating-linear-gradient(
+      97deg,
+      rgba(25, 26, 28, 0.022) 0px, rgba(25, 26, 28, 0.022) 1px,
+      transparent 1px, transparent 14px,
+      rgba(255, 255, 255, 0.34) 14px, rgba(255, 255, 255, 0.34) 16px,
+      transparent 16px, transparent 37px
+    ),
+    /* broad off-centre tonal falloff so the plate isn't dead flat — a rolled
+       metal sheet is never one value edge to edge */
+    radial-gradient(120% 90% at 22% 8%, rgba(255, 255, 255, 0.5) 0%, transparent 62%);
+}
+
+/* Layer 2 — the specular sweep. A single wide, soft-edged highlight raked to
+   match the striations, translated across the viewport over 20s. Animated with
+   translate3d only (composited transform — no per-frame repaint of a full-page
+   background, which is what animating background-position would cost) on its
+   own layer via will-change. Peak alpha 0.62 white ≈ an 8/255 lift on plate —
+   near-invisible in a still frame, but motion perception is far more sensitive
+   than static contrast, so it reads as light travelling without ever competing
+   with text. Deliberately under-tuned: erring bright makes it look "animated". */
+.titanium::after {
+  content: "";
+  position: fixed;
+  top: -40vh;
+  left: 0;
+  width: 42vw;
+  height: 180vh;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.18) 26%,
+    rgba(255, 255, 255, 0.62) 50%,
+    rgba(255, 255, 255, 0.18) 74%,
+    transparent 100%
+  );
+  will-change: transform;
+  transform: translate3d(-60vw, 0, 0) rotate(7deg);
+  animation: titanium-sweep 20s linear infinite;
+}
+
+@keyframes titanium-sweep {
+  from { transform: translate3d(-60vw, 0, 0) rotate(7deg); }
+  to   { transform: translate3d(160vw, 0, 0) rotate(7deg); }
+}
+
+/* Mobile perf: drop the compositing layer entirely (same precedent as the
+   cheaper .glass frost above). The brushed texture is free and stays. */
+@media (max-width: 640px) {
+  .titanium::after {
+    display: none;
+  }
+}
+
+/* Reduced motion: kill the sweep, keep the static brushed metal. */
+@media (prefers-reduced-motion: reduce) {
+  .titanium::after {
+    display: none;
+  }
 }
 
 ::selection {

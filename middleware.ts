@@ -25,10 +25,13 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // icon.png / apple-icon.png / manifest.webmanifest / icons/* are fetched by
-  // iOS/Android without cookies when adding to the home screen, so they must
-  // stay reachable unauthenticated or home-screen icons silently 307 to /login.
+  // icon.svg / apple-icon.png / manifest.webmanifest / icons/* are fetched by
+  // browsers and by iOS/Android without cookies (tab favicon, add-to-home-
+  // screen), so they must stay reachable unauthenticated or they silently 307
+  // to /login. favicon.ico stays listed even though the file is gone (the
+  // favicon is now app/icon.svg): browsers request /favicon.ico unprompted, and
+  // a clean 404 beats a login redirect. icon.png was removed with the file.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.svg|icon.png|apple-icon.png|manifest.json|manifest.webmanifest|icons/).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|manifest.json|manifest.webmanifest|icons/).*)",
   ],
 };
