@@ -10,16 +10,6 @@
     "purpose": "Drafts LinkedIn posts into the LinkedIn Posts DB."
   },
   {
-    "name": "IG Story drafts",
-    "cadence": "Weekly",
-    "purpose": "Drafts IG Story posts (manual publish lane)."
-  },
-  {
-    "name": "IG Carousel drafts",
-    "cadence": "Weekly",
-    "purpose": "Drafts carousel concepts; Canva production before posting."
-  },
-  {
     "name": "Sunday cleanup",
     "cadence": "Sun",
     "purpose": "Deletes past-dated unposted X/LinkedIn drafts. Must skip scheduled items — coordinate before enabling auto-publishing."

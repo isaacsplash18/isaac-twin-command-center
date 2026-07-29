@@ -82,8 +82,8 @@ export const PLATFORM_TABS: { key: PlatformKey | "all"; label: string }[] = [
   { key: "x", label: "X" },
   { key: "linkedin", label: "LINKEDIN" },
   { key: "substack", label: "SUBSTACK" },
-  { key: "ig-story", label: "IG STORY" },
-  { key: "ig-carousel", label: "IG CAROUSEL" },
+  // IG STORY and IG CAROUSEL hidden 2026-07-29 (engines switched off).
+  // The PlatformKey union above deliberately still carries both keys.
 ];
 
 export function formatSgt(iso: string | null | undefined): string {
