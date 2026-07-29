@@ -6,10 +6,16 @@ import { FrameCard } from "./FrameCard";
 import { postAction } from "./useApi";
 import { ContentItem, PLATFORM_TABS, PlatformKey, formatSgt, twinPulse } from "./types";
 
-/** Per-platform char limits: X is a hard 280 (over → oxbright); LinkedIn a soft 3000 (over → amber). */
+/**
+ * Per-platform char limits: X is a hard 280 (over → oxbright); LinkedIn a soft
+ * 3000 and Substack Notes a soft 600 (over → amber). The Substack platform
+ * ceiling is 10,000, but a Note that runs past ~600 has stopped being an
+ * observation, so the amber is a voice guardrail, not a platform one.
+ */
 const CHAR_LIMITS: Partial<Record<PlatformKey, { limit: number; hard: boolean }>> = {
   x: { limit: 280, hard: true },
   linkedin: { limit: 3000, hard: false },
+  substack: { limit: 600, hard: false },
 };
 
 /**
@@ -44,7 +50,7 @@ export function ApprovalQueue({
               key={t.key}
               type="button"
               onClick={() => onTab(t.key)}
-              className={`flex min-h-11 items-center justify-center px-3 py-1.5 font-mono text-[11px] tracking-[0.15em] transition-colors sm:min-h-0 sm:text-[10px] ${
+              className={`flex min-h-11 items-center justify-center px-3 py-1.5 font-mono text-[11px] tracking-[0.1em] transition-colors sm:min-h-0 ${
                 tab === t.key ? "bg-panel text-ink border border-hairline" : "text-ink-dim hover:text-ink border border-transparent"
               }`}
             >
@@ -57,7 +63,7 @@ export function ApprovalQueue({
 
       {visible.length === 0 ? (
         <FrameCard className="p-8 text-center">
-          <p className="font-mono text-xs tracking-[0.2em] text-ink-dim">QUEUE CLEAR.</p>
+          <p className="font-mono text-xs tracking-[0.12em] text-ink-dim">QUEUE CLEAR.</p>
         </FrameCard>
       ) : (
         <div className="flex flex-col gap-3">
@@ -157,16 +163,16 @@ function DraftCard({
   return (
     <FrameCard index={index} sweep className="p-4 sm:p-5">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="font-mono text-[10px] tracking-[0.2em] text-ink-dim">
+        <span className="font-mono text-[11px] tracking-[0.12em] text-ink-dim">
           {item.platformLabel.toUpperCase()}
           {item.editedBeforeApproval && <span className="ml-2 text-amber">EDITED</span>}
           {item.inCanva && <span className="ml-2 text-slate">IN CANVA</span>}
         </span>
-        <span className="font-mono text-[10px] text-ink-dim/80">{formatSgt(item.createdTime)}</span>
+        <span className="font-mono text-[11px] text-ink-dim/80">{formatSgt(item.createdTime)}</span>
       </div>
 
       {item.platform === "x" && item.title && item.title !== item.body && (
-        <p className="mt-2 font-mono text-[10px] tracking-wider text-ink-dim">HOOK: {item.title}</p>
+        <p className="mt-2 font-mono text-[11px] tracking-wider text-ink-dim">HOOK: {item.title}</p>
       )}
 
       {editing ? (
@@ -176,7 +182,7 @@ function DraftCard({
               <button
                 type="button"
                 onClick={() => setShowOriginal((v) => !v)}
-                className="flex min-h-11 items-center border border-hairline px-2 py-0.5 font-mono text-[10px] tracking-wider text-ink-dim hover:text-ink sm:min-h-0"
+                className="flex min-h-11 items-center border border-hairline px-2 py-0.5 font-mono text-[11px] tracking-wider text-ink-dim hover:text-ink sm:min-h-0"
               >
                 {showOriginal ? "HIDE ORIGINAL" : "VS ORIGINAL"}
               </button>
@@ -184,7 +190,7 @@ function DraftCard({
           )}
           {showOriginal && item.originalDraft && (
             <div className="mt-2 border border-hairline-faint bg-ground/40 p-3">
-              <div className="font-mono text-[9px] tracking-[0.2em] text-ink-dim/70">ORIGINAL DRAFT</div>
+              <div className="font-mono text-[11px] tracking-[0.12em] text-ink-dim/70">ORIGINAL DRAFT</div>
               <div className="mt-1 whitespace-pre-wrap break-words font-serif text-sm leading-relaxed text-ink-dim">
                 {item.originalDraft}
               </div>
@@ -205,7 +211,7 @@ function DraftCard({
 
       {item.slides && !editing && (
         <details className="mt-3 border border-hairline-faint p-3">
-          <summary className="cursor-pointer font-mono text-[10px] tracking-[0.15em] text-ink-dim">
+          <summary className="cursor-pointer font-mono text-[11px] tracking-[0.1em] text-ink-dim">
             SLIDE TEXTS
           </summary>
           <div className="mt-2 whitespace-pre-wrap break-words font-serif text-sm leading-relaxed text-ink-dim">{item.slides}</div>
@@ -214,7 +220,7 @@ function DraftCard({
 
       <div className="mt-2 flex items-center justify-between">
         {limitDef ? (
-          <span className={`font-mono text-[10px] ${counterClass}`}>
+          <span className={`font-mono text-[11px] ${counterClass}`}>
             {text.length} / {limitDef.limit} CH
           </span>
         ) : (
@@ -224,7 +230,7 @@ function DraftCard({
           href={item.notionUrl}
           target="_blank"
           rel="noreferrer"
-          className="font-mono text-[10px] tracking-wider text-ink-dim underline decoration-hairline underline-offset-4 hover:text-ink"
+          className="font-mono text-[11px] tracking-wider text-ink-dim underline decoration-hairline underline-offset-4 hover:text-ink"
         >
           OPEN IN NOTION ↗
         </a>
@@ -237,7 +243,7 @@ function DraftCard({
               type="button"
               disabled={busy === "save"}
               onClick={saveEdit}
-              className="flex min-h-11 flex-1 items-center justify-center border border-ink/30 bg-ink/10 px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink hover:bg-ink/15 disabled:opacity-50 sm:min-h-0"
+              className="flex min-h-11 flex-1 items-center justify-center border border-ink/30 bg-ink/10 px-4 py-2.5 font-mono text-xs tracking-[0.1em] text-ink hover:bg-ink/15 disabled:opacity-50 sm:min-h-0"
             >
               {busy === "save" ? "SAVING…" : "SAVE"}
             </button>
@@ -247,7 +253,7 @@ function DraftCard({
                 setEditing(false);
                 setText(item.body);
               }}
-              className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink-dim hover:text-ink sm:min-h-0"
+              className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.1em] text-ink-dim hover:text-ink sm:min-h-0"
             >
               CANCEL
             </button>
@@ -278,7 +284,7 @@ function DraftCard({
               type="button"
               disabled={busy !== null}
               onClick={() => act("reject", reason.trim() || undefined)}
-              className="flex min-h-11 items-center justify-center border border-oxbright/60 bg-oxblood/30 px-3 py-2 font-mono text-xs tracking-[0.15em] text-ink hover:bg-oxblood/50 disabled:opacity-50 sm:min-h-0"
+              className="flex min-h-11 items-center justify-center border border-oxbright/60 bg-oxblood/30 px-3 py-2 font-mono text-xs tracking-[0.1em] text-ink hover:bg-oxblood/50 disabled:opacity-50 sm:min-h-0"
             >
               REJECT
             </button>
@@ -286,7 +292,7 @@ function DraftCard({
               type="button"
               disabled={busy !== null}
               onClick={() => act("reject")}
-              className="flex min-h-11 items-center justify-center border border-hairline px-3 py-2 font-mono text-xs tracking-[0.15em] text-ink-dim hover:text-ink disabled:opacity-50 sm:min-h-0"
+              className="flex min-h-11 items-center justify-center border border-hairline px-3 py-2 font-mono text-xs tracking-[0.1em] text-ink-dim hover:text-ink disabled:opacity-50 sm:min-h-0"
             >
               SKIP
             </button>
@@ -297,7 +303,7 @@ function DraftCard({
               type="button"
               disabled={busy !== null}
               onClick={() => act("approve")}
-              className="flex min-h-11 flex-1 items-center justify-center border border-oxbright/60 bg-oxblood/30 px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink hover:bg-oxblood/50 active:bg-oxblood/70 disabled:opacity-50 sm:min-h-0"
+              className="flex min-h-11 flex-1 items-center justify-center border border-oxbright/60 bg-oxblood/30 px-4 py-2.5 font-mono text-xs tracking-[0.1em] text-ink hover:bg-oxblood/50 active:bg-oxblood/70 disabled:opacity-50 sm:min-h-0"
             >
               APPROVE
             </button>
@@ -305,14 +311,14 @@ function DraftCard({
               type="button"
               disabled={busy !== null}
               onClick={() => setRejecting(true)}
-              className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink-dim hover:text-ink disabled:opacity-50 sm:min-h-0"
+              className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.1em] text-ink-dim hover:text-ink disabled:opacity-50 sm:min-h-0"
             >
               REJECT
             </button>
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink-dim hover:text-ink sm:min-h-0"
+              className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.1em] text-ink-dim hover:text-ink sm:min-h-0"
             >
               EDIT
             </button>

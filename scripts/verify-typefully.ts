@@ -62,6 +62,11 @@ async function main() {
   assert("key set, TYPEFULLY_PLATFORMS=linkedin -> x manual", gate(true, "linkedin", "x") === false);
   assert("key set, TYPEFULLY_PLATFORMS=linkedin -> linkedin auto", gate(true, "linkedin", "linkedin") === true);
   assert("key set, TYPEFULLY_PLATFORMS=x,linkedin -> both auto", gate(true, "x,linkedin", "x") === true && gate(true, "x,linkedin", "linkedin") === true);
+  // Substack Notes lane
+  assert('"x,substack" -> {"x","substack"}', setEquals(parseTypefullyPlatforms("x,substack"), ["x", "substack"]));
+  assert("key set, default platforms -> substack stays manual", gate(true, undefined, "substack") === false);
+  assert("key set, TYPEFULLY_PLATFORMS=x,substack -> substack auto", gate(true, "x,substack", "substack") === true);
+  assert("no key -> substack manual even when listed", gate(false, "x,substack", "substack") === false);
 
   if (!process.env.TYPEFULLY_API_KEY) {
     assert("current env has no TYPEFULLY_API_KEY -> TYPEFULLY_ENABLED is false", TYPEFULLY_ENABLED === false);

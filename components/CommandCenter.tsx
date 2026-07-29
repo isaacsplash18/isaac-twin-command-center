@@ -135,7 +135,7 @@ export function CommandCenter() {
         },
       });
     }
-    for (const t of ["all", "x", "linkedin", "ig-story", "ig-carousel"] as const) {
+    for (const t of ["all", "x", "linkedin", "substack", "ig-story", "ig-carousel"] as const) {
       acts.push({
         id: `tab-${t}`,
         label: `Show ${t === "all" ? "all platforms" : t}`,
@@ -166,7 +166,7 @@ export function CommandCenter() {
           <h1 className="truncate font-sans text-sm font-semibold tracking-wide text-ink sm:text-base">
             ISAAC TWIN <span className="text-ink-dim">// COMMAND CENTER</span>
           </h1>
-          <p className="font-mono text-[9px] tracking-[0.2em] text-ink-dim/70">
+          <p className="font-mono text-[11px] tracking-[0.12em] text-ink-dim/70">
             {data ? `SYNCED ${formatSgt(data.fetchedAt)} SGT` : "CONNECTING…"}
           </p>
         </div>
@@ -178,7 +178,7 @@ export function CommandCenter() {
               await postAction("/api/auth/logout");
               window.location.href = "/login";
             }}
-            className="hidden border border-hairline px-3 py-1.5 font-mono text-[10px] tracking-wider text-ink-dim hover:text-ink sm:block"
+            className="hidden border border-hairline px-3 py-1.5 font-mono text-[11px] tracking-wider text-ink-dim hover:text-ink sm:block"
           >
             LOCK
           </button>
@@ -237,7 +237,7 @@ export function CommandCenter() {
           <div className="order-2 lg:order-4 lg:col-span-3 lg:mt-2">
             {queue.loading && !data ? (
               <div className="border border-hairline bg-panel p-8 text-center">
-                <p className="font-mono text-xs tracking-[0.2em] text-ink-dim">LOADING DRAFTS…</p>
+                <p className="font-mono text-xs tracking-[0.12em] text-ink-dim">LOADING DRAFTS…</p>
               </div>
             ) : (
               <ApprovalQueue
@@ -287,7 +287,7 @@ export function CommandCenter() {
       </div>
 
       <footer className="px-4 pb-6 text-center sm:px-6">
-        <p className="font-mono text-[9px] tracking-[0.2em] text-ink-dim/50">
+        <p className="font-mono text-[11px] leading-relaxed tracking-[0.12em] text-ink-dim/50">
           ⌘K COMMAND · LONG-PRESS ON MOBILE · NOTION IS THE SOURCE OF TRUTH
         </p>
       </footer>

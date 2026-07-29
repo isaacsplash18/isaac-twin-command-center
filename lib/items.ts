@@ -195,7 +195,7 @@ export async function createDraft(input: CreateDraftInput): Promise<CreateDraftR
   const platformKey = normalizePlatformKey(input.platform);
   if (!platformKey) {
     throw new DraftInputError(
-      `Unknown platform "${input.platform}" — expected one of: x, linkedin, ig-story (or ig_story), ig-carousel (or ig_carousel)`
+      `Unknown platform "${input.platform}" — expected one of: x, linkedin, substack, ig-story (or ig_story), ig-carousel (or ig_carousel)`
     );
   }
   const p = platform(platformKey);

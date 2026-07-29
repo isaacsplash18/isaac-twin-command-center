@@ -129,12 +129,12 @@ export function CommandPalette({ actions }: { actions: PaletteAction[] }) {
                     }`}
                   >
                     <span>{a.label}</span>
-                    {a.hint && <span className="font-mono text-[10px] tracking-wider text-ink-dim/70">{a.hint}</span>}
+                    {a.hint && <span className="font-mono text-[11px] tracking-wider text-ink-dim/70">{a.hint}</span>}
                   </button>
                 </li>
               ))}
             </ul>
-            <div className="border-t border-hairline-faint px-4 py-2 font-mono text-[10px] tracking-wider text-ink-dim/60">
+            <div className="border-t border-hairline-faint px-4 py-2 font-mono text-[11px] tracking-wider text-ink-dim/60">
               ↑↓ NAVIGATE · ↵ RUN · ESC CLOSE
             </div>
           </motion.div>

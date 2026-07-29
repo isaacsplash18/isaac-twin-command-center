@@ -53,6 +53,7 @@ const CONTENT_DS: { env: string; label: string }[] = [
   { env: "DS_LINKEDIN", label: "LinkedIn Posts" },
   { env: "DS_IG_STORY", label: "IG Story Posts" },
   { env: "DS_IG_CAROUSEL", label: "IG Carousel Posts" },
+  { env: "DS_SUBSTACK_NOTES", label: "Substack Notes" },
 ];
 
 const NEW_PROPS: Record<string, Json> = {
@@ -272,6 +273,7 @@ async function ensureCalibrationEventsDb(): Promise<void> {
               options: [
                 { name: "x" },
                 { name: "linkedin" },
+                { name: "substack" },
                 { name: "ig_story" },
                 { name: "ig_carousel" },
                 { name: "unknown" },

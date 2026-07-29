@@ -59,7 +59,7 @@ export function QueuePanel({
         <StatusPill status={item.status} />
       </div>
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[10px] text-ink-dim/80">
+        <span className="font-mono text-[11px] leading-snug text-ink-dim/80">
           {item.platformLabel.toUpperCase()}
           {item.scheduledAt && ` · ${formatSgt(item.scheduledAt)}`}
         </span>
@@ -73,7 +73,7 @@ export function QueuePanel({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="flex min-h-11 items-center justify-center border border-hairline px-2 py-0.5 font-mono text-[11px] tracking-wider text-ink-dim hover:text-ink disabled:opacity-40 sm:min-h-0 sm:text-[9px]"
+      className="flex min-h-11 items-center justify-center border border-hairline px-2 py-0.5 font-mono text-[11px] tracking-wider text-ink-dim hover:text-ink disabled:opacity-40 sm:min-h-0"
     >
       {label}
     </button>
@@ -81,11 +81,11 @@ export function QueuePanel({
 
   return (
     <FrameCard index={index} className="p-4">
-      <h2 className="font-mono text-[10px] tracking-[0.2em] text-ink-dim">QUEUE &amp; POSTED</h2>
+      <h2 className="font-mono text-[11px] tracking-[0.12em] text-ink-dim">QUEUE &amp; POSTED</h2>
 
       {manual.length > 0 && (
         <>
-          <h3 className="mt-3 font-mono text-[9px] tracking-[0.2em] text-amber">APPROVED — POST MANUALLY</h3>
+          <h3 className="mt-3 font-mono text-[11px] tracking-[0.12em] text-amber">APPROVED — POST MANUALLY</h3>
           <ul className="mt-1">
             {manual.map((item) => (
               <Row key={item.id} item={item}>
@@ -110,7 +110,7 @@ export function QueuePanel({
 
       {approved.length > 0 && (
         <>
-          <h3 className="mt-3 font-mono text-[9px] tracking-[0.2em] text-ink-dim/80">APPROVED — AWAITING SCHEDULER</h3>
+          <h3 className="mt-3 font-mono text-[11px] tracking-[0.12em] text-ink-dim/80">APPROVED — AWAITING SCHEDULER</h3>
           <ul className="mt-1">
             {approved.map((item) => (
               <Row key={item.id} item={item}>
@@ -127,7 +127,7 @@ export function QueuePanel({
 
       {queued.length > 0 && (
         <>
-          <h3 className="mt-3 font-mono text-[9px] tracking-[0.2em] text-ink-dim/80">SCHEDULED</h3>
+          <h3 className="mt-3 font-mono text-[11px] tracking-[0.12em] text-ink-dim/80">SCHEDULED</h3>
           <ul className="mt-1">
             {queued.map((item) => (
               <Row key={item.id} item={item}>
@@ -142,9 +142,9 @@ export function QueuePanel({
         </>
       )}
 
-      <h3 className="mt-3 font-mono text-[9px] tracking-[0.2em] text-ink-dim/80">RECENTLY POSTED</h3>
+      <h3 className="mt-3 font-mono text-[11px] tracking-[0.12em] text-ink-dim/80">RECENTLY POSTED</h3>
       {posted.length === 0 ? (
-        <p className="mt-1 py-1 font-mono text-[10px] text-ink-dim/60">Nothing posted yet.</p>
+        <p className="mt-1 py-1 font-mono text-[11px] text-ink-dim/60">Nothing posted yet.</p>
       ) : (
         <ul className="mt-1">
           {posted.map((item) => (
@@ -155,7 +155,7 @@ export function QueuePanel({
 
       {rejected.length > 0 && (
         <>
-          <h3 className="mt-3 font-mono text-[9px] tracking-[0.2em] text-ink-dim/80">RECENTLY REJECTED</h3>
+          <h3 className="mt-3 font-mono text-[11px] tracking-[0.12em] text-ink-dim/80">RECENTLY REJECTED</h3>
           <ul className="mt-1">
             {rejected.map((item) => (
               <Row key={item.id} item={item} />

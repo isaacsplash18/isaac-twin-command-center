@@ -83,7 +83,7 @@ function Gauge3D({ value, windowDays }: { value: number | null; windowDays: numb
         <span className="font-mono text-3xl font-semibold text-ink drop-shadow-[0_0_10px_rgba(166,27,28,0.35)]">
           {pct(value)}
         </span>
-        <span className="font-mono text-[9px] tracking-[0.3em] text-ink-dim">UNTOUCHED · {windowDays}D</span>
+        <span className="font-mono text-[11px] tracking-[0.18em] text-ink-dim">UNTOUCHED · {windowDays}D</span>
       </div>
     </div>
   );
@@ -100,12 +100,15 @@ function Sparkline({ values }: { values: number[] }) {
   );
 }
 
+// px-2 (was px-3) and a tighter 0.08em track buy back the width the 9px→11px
+// label bump costs — these tiles sit three-across in a 300px rail, where a
+// 9-character caps label is the binding constraint.
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="border border-hairline-faint px-3 py-2">
-      <div className="font-mono text-[9px] tracking-[0.15em] text-ink-dim">{label}</div>
+    <div className="border border-hairline-faint px-2 py-2">
+      <div className="font-mono text-[11px] leading-snug tracking-[0.08em] text-ink-dim">{label}</div>
       <div className="mt-0.5 font-mono text-lg text-ink">{value}</div>
-      {sub && <div className="font-mono text-[9px] text-ink-dim/80">{sub}</div>}
+      {sub && <div className="font-mono text-[11px] text-ink-dim/80">{sub}</div>}
     </div>
   );
 }
@@ -117,14 +120,14 @@ export function KpiPanel({ index }: { index: number }) {
   return (
     <FrameCard index={index} className="p-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-mono text-[10px] tracking-[0.2em] text-ink-dim">TWIN PERFORMANCE</h2>
-        <div className="flex gap-px font-mono text-[10px]">
+        <h2 className="font-mono text-[11px] tracking-[0.12em] text-ink-dim">TWIN PERFORMANCE</h2>
+        <div className="flex gap-px font-mono text-[11px]">
           {([7, 28] as const).map((w) => (
             <button
               key={w}
               type="button"
               onClick={() => setWindowDays(w)}
-              className={`flex min-h-11 items-center justify-center px-2 py-0.5 text-[11px] tracking-wider sm:min-h-0 sm:text-[10px] ${
+              className={`flex min-h-11 items-center justify-center px-2 py-0.5 text-[11px] tracking-wider sm:min-h-0 ${
                 windowDays === w ? "bg-ink/10 text-ink" : "text-ink-dim hover:text-ink"
               }`}
             >
@@ -160,12 +163,18 @@ export function KpiPanel({ index }: { index: number }) {
             />
             <Stat label="PUB FAILURES" value={String(data.overall.publishFailures)} />
           </div>
-          <div className="mt-3 grid grid-cols-4 gap-2 border-t border-hairline-faint pt-2">
-            {(["x", "linkedin", "ig-story", "ig-carousel"] as const).map((k) => (
+          <div className="mt-3 grid grid-cols-5 gap-2 border-t border-hairline-faint pt-2">
+            {(
+              [
+                ["x", "X"],
+                ["linkedin", "LI"],
+                ["substack", "SUB"],
+                ["ig-story", "IG-S"],
+                ["ig-carousel", "IG-C"],
+              ] as const
+            ).map(([k, label]) => (
               <div key={k}>
-                <div className="font-mono text-[9px] tracking-wider text-ink-dim/80">
-                  {k === "x" ? "X" : k === "linkedin" ? "LI" : k === "ig-story" ? "IG-S" : "IG-C"}
-                </div>
+                <div className="font-mono text-[11px] tracking-wider text-ink-dim/80">{label}</div>
                 <div className="font-mono text-xs text-ink">{pct(data.perPlatform[k]?.untouchedApprovalRate)}</div>
               </div>
             ))}

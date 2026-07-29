@@ -1,4 +1,4 @@
-export type PlatformKey = "x" | "linkedin" | "ig-story" | "ig-carousel";
+export type PlatformKey = "x" | "linkedin" | "substack" | "ig-story" | "ig-carousel";
 
 export interface ContentItem {
   id: string;
@@ -81,6 +81,7 @@ export const PLATFORM_TABS: { key: PlatformKey | "all"; label: string }[] = [
   { key: "all", label: "ALL" },
   { key: "x", label: "X" },
   { key: "linkedin", label: "LINKEDIN" },
+  { key: "substack", label: "SUBSTACK" },
   { key: "ig-story", label: "IG STORY" },
   { key: "ig-carousel", label: "IG CAROUSEL" },
 ];
