@@ -11,3 +11,11 @@ next-env.d.ts
 
 # stray Higgsfield downloads (the canonical clip lives in public/)
 hf_*.mp4
+
+# --- added: standard exclusions ---
+.env.*
+!.env.example
+!**/.env.example
+dist/
+build/
+_to_delete/
