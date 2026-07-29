@@ -40,6 +40,7 @@ const EXPECTED: Record<string, string> = {
   DS_LINKEDIN: "daa5bffd-96b9-4864-aca0-61a8a1bfdf11",
   DS_IG_STORY: "58dd1e1a-a868-4b86-8690-14945ec72cba",
   DS_IG_CAROUSEL: "5fdd5231-f28d-4cb9-b1a2-b3389d6e972b",
+  DS_SUBSTACK_NOTES: "83e1fe3e-136b-41d3-8c61-333ab0882b0b",
   DS_POSITIONS: "fd5f9efb-721d-40b5-b932-bf198e88f953",
   DS_INBOX: "02d3dbb3-50d6-47d3-951d-5b05d46a8699",
   DS_WIKI: "2316d4b5-2d25-44d4-87e5-13539945fd8b",

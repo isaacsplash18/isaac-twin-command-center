@@ -24,7 +24,7 @@ import {
 /** Map the app's platform key (e.g. "ig-story") to the CalibrationEvents schema's snake_case value. */
 function calibrationPlatform(key: string): CalibrationPlatform {
   const mapped = key.replace(/-/g, "_");
-  return (["x", "linkedin", "ig_story", "ig_carousel"].includes(mapped) ? mapped : "unknown") as CalibrationPlatform;
+  return (["x", "linkedin", "substack", "ig_story", "ig_carousel"].includes(mapped) ? mapped : "unknown") as CalibrationPlatform;
 }
 
 export class ActionError extends Error {

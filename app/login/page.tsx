@@ -33,7 +33,7 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center p-6">
       <form onSubmit={submit} className="w-full max-w-xs border border-hairline bg-panel p-6">
-        <h1 className="font-mono text-xs tracking-[0.25em] text-ink-dim">ISAAC TWIN</h1>
+        <h1 className="font-mono text-xs tracking-[0.15em] text-ink-dim">ISAAC TWIN</h1>
         <p className="mt-1 font-sans text-lg font-semibold text-ink">Command Center</p>
         <input
           type="password"
@@ -48,7 +48,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={busy || !passphrase}
-          className="mt-4 w-full border border-oxbright/60 bg-oxblood/30 px-4 py-2.5 font-mono text-xs tracking-[0.2em] text-ink hover:bg-oxblood/50 disabled:opacity-50"
+          className="mt-4 w-full border border-oxbright/60 bg-oxblood/30 px-4 py-2.5 font-mono text-xs tracking-[0.12em] text-ink hover:bg-oxblood/50 disabled:opacity-50"
         >
           {busy ? "VERIFYING…" : "UNLOCK"}
         </button>

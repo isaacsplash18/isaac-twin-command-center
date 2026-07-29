@@ -70,9 +70,11 @@ export interface CreateDraftResult {
  * - X: threadify off — a single post unless the body contains explicit
  *   `\n\n---\n\n` breaks, which map to thread posts.
  * - LinkedIn: always a single post.
+ * - Substack (Notes): always a single post. Notes have no thread concept,
+ *   so the thread-break marker is deliberately not honoured here.
  */
 export async function createScheduledDraft(opts: {
-  platform: "x" | "linkedin";
+  platform: "x" | "linkedin" | "substack";
   body: string;
   publishAtIso: string;
 }): Promise<CreateDraftResult> {
@@ -115,7 +117,7 @@ export async function getDraftState(draftId: string): Promise<DraftState> {
   const status = legacyStatus === "published" || publishState === "finished" ? "published" : legacyStatus || publishState;
   return {
     status,
-    publishedUrl: d.x_published_url ?? d.linkedin_published_url ?? null,
+    publishedUrl: d.x_published_url ?? d.linkedin_published_url ?? d.substack_published_url ?? null,
   };
 }
 

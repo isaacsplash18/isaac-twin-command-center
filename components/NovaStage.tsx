@@ -130,12 +130,12 @@ export function NovaStage({
         <div className="absolute inset-x-0 top-[83%] z-10 flex justify-center px-4 sm:top-[68%]">
           <div className="w-full max-w-xl border border-hairline bg-panel/90 p-4 shadow-[0_0_40px_rgba(0,0,0,0.6)] sm:p-5">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <span className="font-mono text-[9px] tracking-[0.25em] text-oxbright">
+              <span className="font-mono text-[11px] tracking-[0.15em] text-oxbright">
                 CALIBRATION · {open.length} LEFT THIS ROUND
               </span>
               {q.tag && (
                 <span
-                  className={`font-mono text-[9px] tracking-wider ${
+                  className={`font-mono text-[11px] tracking-wider ${
                     q.tag.toLowerCase() === "contested" ? "text-oxbright" : "text-amber"
                   }`}
                 >
@@ -156,7 +156,7 @@ export function NovaStage({
                   key={v}
                   type="button"
                   onClick={() => setVerdict(verdict === v ? null : v)}
-                  className={`flex min-h-11 items-center justify-center px-3 py-1.5 font-mono text-[11px] tracking-[0.15em] transition-colors sm:min-h-0 sm:text-[10px] ${
+                  className={`flex min-h-11 items-center justify-center px-3 py-1.5 font-mono text-[11px] tracking-[0.1em] transition-colors sm:min-h-0 ${
                     verdict === v
                       ? v === "Reject"
                         ? "border border-oxbright/60 bg-oxblood/30 text-ink"
@@ -172,7 +172,7 @@ export function NovaStage({
                   href={q.positionUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="ml-auto font-mono text-[9px] tracking-wider text-ink-dim underline decoration-hairline underline-offset-4 hover:text-ink"
+                  className="ml-auto font-mono text-[11px] tracking-wider text-ink-dim underline decoration-hairline underline-offset-4 hover:text-ink"
                 >
                   POSITION ↗
                 </a>
@@ -192,7 +192,7 @@ export function NovaStage({
                 type="button"
                 disabled={busy}
                 onClick={submit}
-                className="flex min-h-11 flex-1 items-center justify-center border border-oxbright/60 bg-oxblood/30 px-4 py-2.5 font-mono text-xs tracking-[0.2em] text-ink hover:bg-oxblood/50 active:bg-oxblood/70 disabled:opacity-50 sm:min-h-0"
+                className="flex min-h-11 flex-1 items-center justify-center border border-oxbright/60 bg-oxblood/30 px-4 py-2.5 font-mono text-xs tracking-[0.12em] text-ink hover:bg-oxblood/50 active:bg-oxblood/70 disabled:opacity-50 sm:min-h-0"
               >
                 {busy ? "CALIBRATING…" : "SUBMIT"}
               </button>
@@ -200,7 +200,7 @@ export function NovaStage({
                 type="button"
                 disabled={busy}
                 onClick={skip}
-                className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.15em] text-ink-dim hover:text-ink disabled:opacity-50 sm:min-h-0"
+                className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.1em] text-ink-dim hover:text-ink disabled:opacity-50 sm:min-h-0"
               >
                 LATER
               </button>

@@ -64,7 +64,7 @@ export function BootSequence() {
               animate={{ scaleX: 1 }}
               transition={{ duration: 0.4, ease: "easeOut" }}
             />
-            <p className="mt-3 min-h-[1.25rem] text-left font-mono text-xs tracking-[0.2em] text-ink">
+            <p className="mt-3 min-h-[1.25rem] text-left font-mono text-xs tracking-[0.12em] text-ink">
               {typed}
               <span className="animate-pulse text-oxbright">▍</span>
             </p>

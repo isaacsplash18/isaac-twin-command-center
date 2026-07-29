@@ -14,7 +14,7 @@ export function StatusPill({ status }: { status: string | null }) {
             ? "bg-ink/70"
             : "bg-slate";
   return (
-    <span className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.15em] text-ink-dim">
+    <span className="inline-flex items-center gap-1.5 font-mono text-[11px] tracking-[0.1em] text-ink-dim">
       <span className={`h-[6px] w-[6px] rounded-full ${color} ${s === "QUEUED" ? "dot-pulse" : ""}`} />
       {s}
     </span>

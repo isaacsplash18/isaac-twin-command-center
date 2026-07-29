@@ -27,7 +27,7 @@ type Json = any;
 
 export type CalibrationSource = "command_center" | "telegram" | "hermes";
 export type CalibrationObjectType = "draft" | "position" | "calibration_card" | "wiki_note";
-export type CalibrationPlatform = "x" | "linkedin" | "ig_story" | "ig_carousel" | "unknown";
+export type CalibrationPlatform = "x" | "linkedin" | "substack" | "ig_story" | "ig_carousel" | "unknown";
 export type CalibrationAction = "approve" | "reject" | "edit" | "confirm" | "sharpen" | "submit" | "later";
 export type CalibrationStatus = "pending" | "accepted" | "rejected" | "applied";
 

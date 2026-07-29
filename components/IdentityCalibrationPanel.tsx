@@ -121,8 +121,8 @@ export function IdentityCalibrationPanel({ index, onError }: { index: number; on
 
   return (
     <FrameCard index={index} className="p-4">
-      <h2 className="font-mono text-[10px] tracking-[0.2em] text-ink-dim">IDENTITY CALIBRATION</h2>
-      <p className="mt-1 break-words font-mono text-[9px] leading-snug text-ink-dim/70">
+      <h2 className="font-mono text-[11px] tracking-[0.12em] text-ink-dim">IDENTITY CALIBRATION</h2>
+      <p className="mt-1 break-words font-mono text-[11px] leading-snug text-ink-dim/70">
         Accepted amendments are never auto-applied — canonical files change only when Isaac applies them.
       </p>
 
@@ -170,11 +170,11 @@ function Lane({
   return (
     <div className="mt-3">
       <div className="flex items-baseline justify-between">
-        <h3 className="font-mono text-[9px] tracking-[0.2em] text-ink-dim/80">{label}</h3>
-        {items.length > 0 && <span className="font-mono text-[9px] text-ink-dim/60">{items.length}</span>}
+        <h3 className="font-mono text-[11px] tracking-[0.12em] text-ink-dim/80">{label}</h3>
+        {items.length > 0 && <span className="font-mono text-[11px] text-ink-dim/60">{items.length}</span>}
       </div>
       {items.length === 0 ? (
-        <p className="mt-1 font-mono text-[10px] text-ink-dim/50">No pending amendments.</p>
+        <p className="mt-1 font-mono text-[11px] text-ink-dim/50">No pending amendments.</p>
       ) : (
         <ul className="mt-1">
           {items.map((a) => (
@@ -214,7 +214,7 @@ function AmendmentCard({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="flex min-h-11 items-center justify-center border border-hairline px-2 py-0.5 font-mono text-[11px] tracking-wider text-ink-dim hover:text-ink disabled:opacity-40 sm:min-h-0 sm:text-[9px]"
+      className="flex min-h-11 items-center justify-center border border-hairline px-2 py-0.5 font-mono text-[11px] tracking-wider text-ink-dim hover:text-ink disabled:opacity-40 sm:min-h-0"
     >
       {label}
     </button>
@@ -224,23 +224,23 @@ function AmendmentCard({
     <li className="border-b border-hairline-faint py-3 last:border-b-0">
       <div className="flex items-baseline justify-between gap-2">
         <span className="min-w-0 flex-1 truncate text-sm text-ink">
-          {a.targetRef && <span className="mr-1 font-mono text-[9px] uppercase text-ink-dim">{a.targetRef}</span>}
+          {a.targetRef && <span className="mr-1 font-mono text-[11px] uppercase text-ink-dim">{a.targetRef}</span>}
           {a.topic || "Untitled"}
         </span>
-        <span className={`font-mono text-[9px] uppercase tracking-wider ${CONFIDENCE_CLASS[a.confidence]}`}>
+        <span className={`font-mono text-[11px] uppercase tracking-wider ${CONFIDENCE_CLASS[a.confidence]}`}>
           {a.confidence}
         </span>
       </div>
 
       {a.evidenceSummary && (
-        <p className="mt-1 whitespace-pre-line break-words font-mono text-[9px] leading-snug text-ink-dim/70">
+        <p className="mt-1 whitespace-pre-line break-words font-mono text-[11px] leading-snug text-ink-dim/70">
           {a.evidenceSummary}
         </p>
       )}
 
       {a.currentPositionText && (
         <div className="mt-2">
-          <div className="font-mono text-[9px] tracking-[0.2em] text-ink-dim/70">CURRENT</div>
+          <div className="font-mono text-[11px] tracking-[0.12em] text-ink-dim/70">CURRENT</div>
           <p className="mt-0.5 whitespace-pre-line break-words font-serif text-xs leading-snug text-ink-dim">
             {a.currentPositionText}
           </p>
@@ -248,7 +248,7 @@ function AmendmentCard({
       )}
 
       <div className="mt-2">
-        <div className="font-mono text-[9px] tracking-[0.2em] text-ink-dim/70">PROPOSED</div>
+        <div className="font-mono text-[11px] tracking-[0.12em] text-ink-dim/70">PROPOSED</div>
         {editing ? (
           <>
             <textarea
@@ -282,16 +282,16 @@ function AmendmentCard({
         )}
       </div>
 
-      {a.reason && <p className="mt-2 break-words font-mono text-[9px] leading-snug text-ink-dim/80">{a.reason}</p>}
+      {a.reason && <p className="mt-2 break-words font-mono text-[11px] leading-snug text-ink-dim/80">{a.reason}</p>}
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-1 font-mono text-[9px] tracking-wider text-ink-dim/70">
+        <label className="flex items-center gap-1 font-mono text-[11px] tracking-wider text-ink-dim/70">
           <span className="hidden sm:inline">CLASSIFY</span>
           <select
             value={a.targetType}
             disabled={busy}
             onChange={(e) => onClassify(a, e.target.value as TargetType)}
-            className="min-h-11 border border-hairline bg-ground px-1 py-0.5 font-mono text-[10px] text-ink focus:border-ink/40 focus:outline-none disabled:opacity-40 sm:min-h-0"
+            className="min-h-11 border border-hairline bg-ground px-1 py-0.5 font-mono text-[11px] text-ink focus:border-ink/40 focus:outline-none disabled:opacity-40 sm:min-h-0"
           >
             {TARGET_OPTIONS.map((t) => (
               <option key={t} value={t}>

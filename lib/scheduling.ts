@@ -4,6 +4,8 @@
  *
  *  - X: one per day, 08:30 SGT.
  *  - LinkedIn: Mon/Wed/Fri, 09:00 SGT.
+ *  - Substack Notes: one per day, 21:00 SGT (09:00 US Eastern, where most
+ *    of the Substack readership actually is).
  */
 
 const SGT_OFFSET_MS = 8 * 60 * 60 * 1000;
@@ -24,11 +26,12 @@ function normalizeTaken(takenIso: string[]): Set<number> {
   return new Set(takenIso.map((s) => new Date(s).getTime()).filter((n) => !Number.isNaN(n)));
 }
 
-export type SchedulablePlatform = "x" | "linkedin";
+export type SchedulablePlatform = "x" | "linkedin" | "substack";
 
 const CADENCE: Record<SchedulablePlatform, { days: number[]; hour: number; minute: number }> = {
   x: { days: [0, 1, 2, 3, 4, 5, 6], hour: 8, minute: 30 },
   linkedin: { days: [1, 3, 5], hour: 9, minute: 0 }, // Mon/Wed/Fri
+  substack: { days: [0, 1, 2, 3, 4, 5, 6], hour: 21, minute: 0 },
 };
 
 /**

@@ -1,4 +1,4 @@
-export type PlatformKey = "x" | "linkedin" | "ig-story" | "ig-carousel";
+export type PlatformKey = "x" | "linkedin" | "substack" | "ig-story" | "ig-carousel";
 
 export interface PlatformConfig {
   key: PlatformKey;
@@ -46,6 +46,16 @@ export const PLATFORMS: PlatformConfig[] = [
     bodyInPageContent: true,
   },
   {
+    // Substack Notes. Observation-only notes mined from the Larger back
+    // catalogue on rotation; Typefully v2 exposes these as the `substack`
+    // platform. Body lives in page content, same convention as X/LinkedIn.
+    key: "substack",
+    label: "Substack",
+    dsEnv: "DS_SUBSTACK_NOTES",
+    autoPublish: TYPEFULLY_ENABLED && TYPEFULLY_PLATFORMS.has("substack"),
+    bodyInPageContent: true,
+  },
+  {
     key: "ig-story",
     label: "IG Story",
     dsEnv: "DS_IG_STORY",
@@ -84,6 +94,7 @@ export function dataSourceId(p: PlatformConfig): string {
 export const PLATFORM_EVENT_NAMES: Record<PlatformKey, string> = {
   x: "X",
   linkedin: "LinkedIn",
+  substack: "Substack",
   "ig-story": "IG Story",
   "ig-carousel": "IG Carousel",
 };
