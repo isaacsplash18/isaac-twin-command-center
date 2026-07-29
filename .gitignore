@@ -8,3 +8,6 @@ out/
 *.tsbuildinfo
 next-env.d.ts
 .DS_Store
+
+# stray Higgsfield downloads (the canonical clip lives in public/)
+hf_*.mp4
