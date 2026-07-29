@@ -36,7 +36,7 @@ export function parseTypefullyPlatforms(raw: string | undefined): Set<string> {
 
 export const TYPEFULLY_PLATFORMS = parseTypefullyPlatforms(process.env.TYPEFULLY_PLATFORMS);
 
-export const PLATFORMS: PlatformConfig[] = [
+export const ALL_PLATFORMS: PlatformConfig[] = [
   { key: "x", label: "X", dsEnv: "DS_X", autoPublish: TYPEFULLY_ENABLED && TYPEFULLY_PLATFORMS.has("x"), bodyInPageContent: true },
   {
     key: "linkedin",
@@ -74,8 +74,22 @@ export const PLATFORMS: PlatformConfig[] = [
   },
 ];
 
+/**
+ * Platforms hidden from the app. The Instagram engines were switched off on
+ * 2026-07-29 (the drafting routines were removed; Isaac plans to rebuild the
+ * IG system later). Everything below stays wired: the Notion databases, the
+ * DS_IG_* env vars, the PlatformKey union, the Pipeline/Calibration event
+ * names and the ALL_PLATFORMS entries are all intact. To bring a platform
+ * back, delete its key from this array. Nothing else needs to change.
+ */
+export const HIDDEN_PLATFORM_KEYS: PlatformKey[] = ["ig-story", "ig-carousel"];
+
+/** The platforms the app actually surfaces: tabs, KPIs, queue, publisher, Hermes. */
+export const PLATFORMS: PlatformConfig[] = ALL_PLATFORMS.filter((p) => !HIDDEN_PLATFORM_KEYS.includes(p.key));
+
+/** Resolves against ALL_PLATFORMS on purpose, so a hidden platform's config is still addressable by key. */
 export function platform(key: string): PlatformConfig {
-  const p = PLATFORMS.find((p) => p.key === key);
+  const p = ALL_PLATFORMS.find((p) => p.key === key);
   if (!p) throw new Error(`Unknown platform: ${key}`);
   return p;
 }

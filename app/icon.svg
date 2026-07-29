@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Splash diamond">
+  <!--
+    Browser-tab favicon: the LiquidSigil mark (oxbright #A61B1C liquid-metal
+    diamond) as a static, hand-authored SVG. Transparent background so it works
+    on light and dark browser chrome.
+
+    Legibility at 16px drove every decision: one bold rhombus silhouette, a
+    single hard facet split at the waist (bright crown / dark pavilion — the
+    read that says "gem" at any size), and no stroke thinner than 1.2px. The
+    "shiny metal" comes from tonal contrast between facets, not from detail
+    that would vanish when downsampled.
+
+    NOT the PWA/home-screen icon — app/apple-icon.png and public/icons/nova-*
+    stay Nova's face, on purpose.
+  -->
+  <defs>
+    <!-- crown: hot specular red at the upper-left light source, falling to oxbright -->
+    <linearGradient id="crown" x1="7" y1="2" x2="23" y2="16" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E87B63" />
+      <stop offset=".4" stop-color="#C42A26" />
+      <stop offset="1" stop-color="#A61B1C" />
+    </linearGradient>
+    <!-- pavilion: oxblood dropping into near-black so the crown reads as lit -->
+    <linearGradient id="pavilion" x1="10" y1="16" x2="20" y2="31" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8E0C0E" />
+      <stop offset="1" stop-color="#490203" />
+    </linearGradient>
+  </defs>
+
+  <!-- crown (upper half) -->
+  <path d="M16 1 31 16H1Z" fill="url(#crown)" />
+  <!-- pavilion (lower half) -->
+  <path d="M1 16h30L16 31Z" fill="url(#pavilion)" />
+
+  <!-- glint: an off-centre chevron riding the crown facets — the liquid-metal
+       read. Deliberately asymmetric (longer left arm) so the light direction is
+       unambiguous at 16px, where a symmetric highlight just looks like banding. -->
+  <path d="M16 3.8 23.5 11.4 15.4 8.6 6.4 13.2Z" fill="#fff" opacity=".3" />
+
+  <!-- lit rim, upper-left edge hot and upper-right edge cooler: one light source,
+       upper-left. Split into two strokes so the falloff is explicit. -->
+  <path d="M1.7 15.4 16 1.6" fill="none" stroke="#fff" stroke-opacity=".5"
+        stroke-width="1.3" stroke-linecap="round" />
+  <path d="M16 1.6 30.3 15.4" fill="none" stroke="#fff" stroke-opacity=".26"
+        stroke-width="1.2" stroke-linecap="round" />
+  <!-- girdle: the facet break. Very faint — at 16px a strong line here cuts the
+       silhouette into two shapes instead of one diamond. -->
+  <path d="M3 16h26" stroke="#fff" stroke-opacity=".14" stroke-width="1" />
+</svg>

@@ -135,7 +135,7 @@ export function CommandCenter() {
         },
       });
     }
-    for (const t of ["all", "x", "linkedin", "substack", "ig-story", "ig-carousel"] as const) {
+    for (const t of ["all", "x", "linkedin", "substack"] as const) {
       acts.push({
         id: `tab-${t}`,
         label: `Show ${t === "all" ? "all platforms" : t}`,

@@ -163,14 +163,12 @@ export function KpiPanel({ index }: { index: number }) {
             />
             <Stat label="PUB FAILURES" value={String(data.overall.publishFailures)} />
           </div>
-          <div className="mt-3 grid grid-cols-5 gap-2 border-t border-hairline-faint pt-2">
+          <div className="mt-3 grid grid-cols-3 gap-2 border-t border-hairline-faint pt-2">
             {(
               [
                 ["x", "X"],
                 ["linkedin", "LI"],
                 ["substack", "SUB"],
-                ["ig-story", "IG-S"],
-                ["ig-carousel", "IG-C"],
               ] as const
             ).map(([k, label]) => (
               <div key={k}>
