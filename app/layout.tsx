@@ -36,7 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           (w-screen + -translate-x-1/2 in CommandCenter) tripping a 1px
           horizontal scrollbar on desktop browsers where 100vw includes the
           scrollbar gutter. */}
-      <body className="bg-ground text-ink font-sans antialiased min-h-screen overflow-x-hidden titanium">
+      <body className="bg-ground text-ink font-sans antialiased min-h-screen overflow-x-hidden surface">
         {children}
       </body>
     </html>

@@ -83,86 +83,99 @@ export function QueuePanel({
     <FrameCard index={index} className="p-4">
       <h2 className="font-mono text-[11px] tracking-[0.12em] text-ink-dim">QUEUE &amp; POSTED</h2>
 
-      {manual.length > 0 && (
-        <>
-          <h3 className="mt-3 font-mono text-[11px] tracking-[0.12em] text-amber">APPROVED — POST MANUALLY</h3>
-          <ul className="mt-1">
-            {manual.map((item) => (
-              <Row key={item.id} item={item}>
-                <MiniBtn
-                  label="COPY"
-                  onClick={() =>
-                    navigator.clipboard.writeText(
-                      [item.body || item.title, item.slides].filter(Boolean).join("\n\n---\n\n")
-                    )
-                  }
-                />
-                <MiniBtn
-                  label="MARK POSTED"
-                  disabled={busyId !== null}
-                  onClick={() => run(`/api/items/${item.id}/mark-posted`, true)}
-                />
-              </Row>
-            ))}
-          </ul>
-        </>
-      )}
+      {/* This list was making the page very long, so it's capped and scrolls
+          internally instead. The cap lives on this inner wrapper (not on
+          FrameCard) so the "QUEUE & POSTED" title above stays put and never
+          scrolls away. 60vh keeps the rail compact next to Nova on desktop;
+          a shorter 50vh cap below lg keeps it from dominating the mobile
+          single-column stack. No overscroll-behavior here on purpose: once
+          the inner list hits its scroll end, the wheel/touch gesture chains
+          to the page scroll by default, so the panel never traps scrolling —
+          it just adds one more (thin, hairline-styled) scroll region rather
+          than blocking the page underneath it. */}
+      <div className="max-h-[50vh] overflow-y-auto lg:max-h-[60vh]">
 
-      {approved.length > 0 && (
-        <>
-          <h3 className="mt-3 font-mono text-[11px] tracking-[0.12em] text-ink-dim/80">APPROVED — AWAITING SCHEDULER</h3>
-          <ul className="mt-1">
-            {approved.map((item) => (
-              <Row key={item.id} item={item}>
-                <MiniBtn
-                  label="PUBLISH NEXT SLOT"
-                  disabled={busyId !== null}
-                  onClick={() => run(`/api/items/${item.id}/publish-next`, true)}
-                />
-              </Row>
-            ))}
-          </ul>
-        </>
-      )}
+        {manual.length > 0 && (
+          <>
+            <h3 className="mt-3 font-mono text-[11px] tracking-[0.12em] text-amber">APPROVED — POST MANUALLY</h3>
+            <ul className="mt-1">
+              {manual.map((item) => (
+                <Row key={item.id} item={item}>
+                  <MiniBtn
+                    label="COPY"
+                    onClick={() =>
+                      navigator.clipboard.writeText(
+                        [item.body || item.title, item.slides].filter(Boolean).join("\n\n---\n\n")
+                      )
+                    }
+                  />
+                  <MiniBtn
+                    label="MARK POSTED"
+                    disabled={busyId !== null}
+                    onClick={() => run(`/api/items/${item.id}/mark-posted`, true)}
+                  />
+                </Row>
+              ))}
+            </ul>
+          </>
+        )}
 
-      {queued.length > 0 && (
-        <>
-          <h3 className="mt-3 font-mono text-[11px] tracking-[0.12em] text-ink-dim/80">SCHEDULED</h3>
-          <ul className="mt-1">
-            {queued.map((item) => (
-              <Row key={item.id} item={item}>
-                <MiniBtn
-                  label="UNQUEUE"
-                  disabled={busyId !== null}
-                  onClick={() => run(`/api/items/${item.id}/unqueue`)}
-                />
-              </Row>
-            ))}
-          </ul>
-        </>
-      )}
+        {approved.length > 0 && (
+          <>
+            <h3 className="mt-3 font-mono text-[11px] tracking-[0.12em] text-ink-dim/80">APPROVED — AWAITING SCHEDULER</h3>
+            <ul className="mt-1">
+              {approved.map((item) => (
+                <Row key={item.id} item={item}>
+                  <MiniBtn
+                    label="PUBLISH NEXT SLOT"
+                    disabled={busyId !== null}
+                    onClick={() => run(`/api/items/${item.id}/publish-next`, true)}
+                  />
+                </Row>
+              ))}
+            </ul>
+          </>
+        )}
 
-      <h3 className="mt-3 font-mono text-[11px] tracking-[0.12em] text-ink-dim/80">RECENTLY POSTED</h3>
-      {posted.length === 0 ? (
-        <p className="mt-1 py-1 font-mono text-[11px] text-ink-dim/60">Nothing posted yet.</p>
-      ) : (
-        <ul className="mt-1">
-          {posted.map((item) => (
-            <Row key={item.id} item={item} />
-          ))}
-        </ul>
-      )}
+        {queued.length > 0 && (
+          <>
+            <h3 className="mt-3 font-mono text-[11px] tracking-[0.12em] text-ink-dim/80">SCHEDULED</h3>
+            <ul className="mt-1">
+              {queued.map((item) => (
+                <Row key={item.id} item={item}>
+                  <MiniBtn
+                    label="UNQUEUE"
+                    disabled={busyId !== null}
+                    onClick={() => run(`/api/items/${item.id}/unqueue`)}
+                  />
+                </Row>
+              ))}
+            </ul>
+          </>
+        )}
 
-      {rejected.length > 0 && (
-        <>
-          <h3 className="mt-3 font-mono text-[11px] tracking-[0.12em] text-ink-dim/80">RECENTLY REJECTED</h3>
+        <h3 className="mt-3 font-mono text-[11px] tracking-[0.12em] text-ink-dim/80">RECENTLY POSTED</h3>
+        {posted.length === 0 ? (
+          <p className="mt-1 py-1 font-mono text-[11px] text-ink-dim/60">Nothing posted yet.</p>
+        ) : (
           <ul className="mt-1">
-            {rejected.map((item) => (
+            {posted.map((item) => (
               <Row key={item.id} item={item} />
             ))}
           </ul>
-        </>
-      )}
+        )}
+
+        {rejected.length > 0 && (
+          <>
+            <h3 className="mt-3 font-mono text-[11px] tracking-[0.12em] text-ink-dim/80">RECENTLY REJECTED</h3>
+            <ul className="mt-1">
+              {rejected.map((item) => (
+                <Row key={item.id} item={item} />
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
     </FrameCard>
   );
 }

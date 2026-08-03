@@ -6,6 +6,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["next", "start", "-p", "3000"],
       "port": 3000
+    },
+    {
+      "name": "command-center-dev",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["next", "dev", "-p", "3001"],
+      "port": 3001
     }
   ]
 }

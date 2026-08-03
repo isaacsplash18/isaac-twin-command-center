@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
- * NOVA — the twin's face: a looping holographic video (public/nova-hologram.mp4)
- * of her floating in a dark command center. The clip's own background is
+ * NOVA — the twin's face: a holographic video (public/nova-hologram.mp4) of
+ * her floating in a dark command center. The clip's own background is
  * opaque and dark, but the page ground is light, so the wrapper carries a
  * feathered mask (a tall, figure-biased radial ellipse + a heavier bottom
  * fade) that dissolves her edges into the ground on every side — no card,
@@ -13,9 +13,18 @@ import { useEffect, useRef, useState } from "react";
  * channel. She breathes gently, blooms oxblood on Approve and shudders red
  * on failure. Pure CSS/DOM — no canvas, no deps, no video processing (the
  * clip itself stays fully opaque and untouched).
+ *
+ * Playback: on every fresh page load the clip plays through once in full,
+ * then settles into a short idle loop over just its final TAIL_SECONDS —
+ * her "breathing" end state — for as long as the page stays open. See the
+ * playback effect below for the intro→tail state machine.
  */
 
 const OXBRIGHT = "166,27,28";
+
+// One-number tweak for how much of the tail end-state loops after the
+// intro playthrough finishes.
+const TAIL_SECONDS = 0.5;
 
 export type NovaMood = "praise" | "sass" | "neutral";
 
@@ -30,16 +39,101 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
   }, []);
 
   // Reduced motion: hold on a single frame instead of autoplaying — never
-  // blank, just static. Seek past frame 0 since some encodes start on black.
+  // blank, just static. Seek to the tail end-state (where the animated
+  // version comes to rest) rather than the opening frame, so both modes
+  // agree on what "settled" looks like. Guard duration — it's NaN until
+  // metadata loads.
   useEffect(() => {
     const v = videoRef.current;
     if (!v || !reduced) return;
     v.pause();
     const onMeta = () => {
-      v.currentTime = 0.1;
+      v.currentTime = Number.isFinite(v.duration) && v.duration > 0 ? Math.max(0, v.duration - 0.05) : 0.1;
     };
     v.addEventListener("loadedmetadata", onMeta);
     return () => v.removeEventListener("loadedmetadata", onMeta);
+  }, [reduced]);
+
+  // Intro-then-tail playback: play the full clip once on load, then loop
+  // only its final TAIL_SECONDS forever. `loop` is intentionally not set on
+  // the <video> — looping is entirely hand-rolled below so the intro plays
+  // exactly once per mount (i.e. per page load — not gated behind
+  // sessionStorage). Skipped under reduced motion, which has its own static
+  // effect above.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || reduced) return;
+
+    let tailing = false;
+    let rvfcHandle: number | null = null;
+
+    // Feature-check via typeof rather than a bare truthiness check —
+    // `requestVideoFrameCallback`/`fastSeek` are typed as always-present on
+    // HTMLVideoElement in this lib snapshot, but real-world support (older
+    // Safari, some WebViews) still varies.
+    const supportsRVFC = typeof v.requestVideoFrameCallback === "function";
+    const supportsFastSeek = typeof v.fastSeek === "function";
+
+    const seek = (t: number) => {
+      if (supportsFastSeek) v.fastSeek(t);
+      else v.currentTime = t;
+    };
+
+    const tailStart = () => (Number.isFinite(v.duration) && v.duration > 0 ? Math.max(0, v.duration - TAIL_SECONDS) : null);
+
+    // Seek back once we're within EPSILON of the end rather than waiting on
+    // another `ended` — `ended` only fires after the last frame has already
+    // sat on screen, which would visibly stall the loop.
+    const EPSILON = 0.03;
+    const maybeLoopTail = () => {
+      const start = tailStart();
+      if (start === null) return;
+      if (v.currentTime >= v.duration - EPSILON) seek(start);
+    };
+
+    const onTimeUpdate = () => {
+      if (tailing) maybeLoopTail();
+    };
+
+    const scheduleFrame = () => {
+      if (!tailing || !supportsRVFC) return;
+      rvfcHandle = v.requestVideoFrameCallback(() => {
+        maybeLoopTail();
+        scheduleFrame();
+      });
+    };
+
+    const enterTail = () => {
+      tailing = true;
+      const start = tailStart();
+      if (start !== null) seek(start);
+      v.play().catch(() => {
+        /* autoplay blocked — element still holds the seeked-to frame */
+      });
+      if (supportsRVFC) scheduleFrame();
+    };
+
+    v.addEventListener("ended", enterTail);
+    // Both loop-back drivers are attached unconditionally (not either/or):
+    // rVFC is the precise one — tight, frame-accurate seek-back — but it can
+    // go quiet in some real environments (background tabs, some WebViews,
+    // headless/preview contexts that suspend video) without any error, which
+    // would otherwise leave the clip frozen on its last frame forever.
+    // `timeupdate` is a coarser (~4/sec) backstop that still catches the
+    // seek-back within one epsilon-sized window. Both funnel through the same
+    // `maybeLoopTail` guard, and the guard is idempotent: once the seek-back
+    // fires, `currentTime` drops below `duration - EPSILON`, so whichever
+    // handler fires second on the same frame is a no-op.
+    v.addEventListener("timeupdate", onTimeUpdate);
+    v.play().catch(() => {
+      /* autoplay blocked — element still shows a decoded frame, not blank */
+    });
+
+    return () => {
+      v.removeEventListener("ended", enterTail);
+      v.removeEventListener("timeupdate", onTimeUpdate);
+      if (rvfcHandle !== null && supportsRVFC) v.cancelVideoFrameCallback(rvfcHandle);
+    };
   }, [reduced]);
 
   // Base holographic glow by mood; pulses layer on top. Kept restrained — a
@@ -145,7 +239,6 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
               style={{ objectFit: "cover", objectPosition: "center" }}
               src="/nova-hologram.mp4"
               muted
-              loop
               playsInline
               autoPlay={!reduced}
               preload="auto"
