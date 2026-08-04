@@ -98,6 +98,17 @@ function DraftCard({
   const [reason, setReason] = useState("");
   const [showOriginal, setShowOriginal] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const rejectRowRef = useRef<HTMLDivElement>(null);
+  const blurCheckRef = useRef<number | null>(null);
+
+  // Any pending deferred blur re-check (see onBlur below) must never fire
+  // after this card unmounts — clear it on cleanup rather than let it run
+  // against a detached ref.
+  useEffect(() => {
+    return () => {
+      if (blurCheckRef.current !== null) cancelAnimationFrame(blurCheckRef.current);
+    };
+  }, []);
 
   // Autosize the edit textarea to its content (no fixed rows, no scrollbars).
   useEffect(() => {
@@ -263,9 +274,31 @@ function DraftCard({
           // becomes a pending unclassified amendment; SKIP rejects with none.
           // Escape or focus leaving the row cancels.
           <div
+            ref={rejectRowRef}
             className="flex w-full gap-2"
             onBlur={(e) => {
-              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) cancelReject();
+              // Touch devices (notably iOS Safari) don't move focus to a
+              // <button> on tap, so a tap on REJECT/SKIP fires this blur with
+              // relatedTarget: null — indistinguishable, by that field alone,
+              // from focus genuinely leaving the row. Trusting it naively
+              // (`!contains(relatedTarget)` treating null as "outside") calls
+              // cancelReject() synchronously, which unmounts this row —
+              // including the button mid-tap — before its own onClick can
+              // fire, so the reject request never goes out. Belt: the
+              // buttons below preventDefault on pointerdown so focus never
+              // actually leaves the input on tap, and this handler shouldn't
+              // even run. Braces: if it does run with a null relatedTarget,
+              // defer one frame and re-check where focus actually landed
+              // (rather than trusting the stale relatedTarget) before
+              // cancelling, so a genuine click on REJECT/SKIP always wins.
+              if (e.relatedTarget && e.currentTarget.contains(e.relatedTarget as Node)) return;
+              if (blurCheckRef.current !== null) cancelAnimationFrame(blurCheckRef.current);
+              blurCheckRef.current = requestAnimationFrame(() => {
+                blurCheckRef.current = null;
+                const row = rejectRowRef.current;
+                if (!row) return; // unmounted (e.g. the action already went through)
+                if (!row.contains(document.activeElement)) cancelReject();
+              });
             }}
           >
             <input
@@ -283,6 +316,13 @@ function DraftCard({
             <button
               type="button"
               disabled={busy !== null}
+              // Stops focus from ever leaving the input on tap (touch
+              // devices don't focus buttons on tap anyway, but this also
+              // covers mouse/desktop), so the onBlur above never fires for a
+              // genuine REJECT tap in the first place. Does not suppress the
+              // click event that follows.
+              onPointerDown={(e) => e.preventDefault()}
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => act("reject", reason.trim() || undefined)}
               className="flex min-h-11 items-center justify-center border border-oxbright/60 bg-oxblood/30 px-3 py-2 font-mono text-xs tracking-[0.1em] text-ink hover:bg-oxblood/50 disabled:opacity-50 sm:min-h-0"
             >
@@ -291,6 +331,8 @@ function DraftCard({
             <button
               type="button"
               disabled={busy !== null}
+              onPointerDown={(e) => e.preventDefault()}
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => act("reject")}
               className="flex min-h-11 items-center justify-center border border-hairline px-3 py-2 font-mono text-xs tracking-[0.1em] text-ink-dim hover:text-ink disabled:opacity-50 sm:min-h-0"
             >
