@@ -23,8 +23,10 @@ import { useEffect, useRef, useState } from "react";
 const OXBRIGHT = "166,27,28";
 
 // One-number tweak for how much of the tail end-state loops after the
-// intro playthrough finishes.
-const TAIL_SECONDS = 0.5;
+// intro playthrough finishes. Kept at a couple of seconds rather than a
+// fraction of one — a sub-second tail means the decoder re-seeks twice a
+// second, which stutters on mobile.
+const TAIL_SECONDS = 2;
 
 export type NovaMood = "praise" | "sass" | "neutral";
 
