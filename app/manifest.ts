@@ -15,19 +15,19 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#f2f2ef",
     icons: [
       {
-        src: "/icons/nova-192.png",
+        src: "/icons/diamond-192.png",
         sizes: "192x192",
         type: "image/png",
         purpose: "any",
       },
       {
-        src: "/icons/nova-512.png",
+        src: "/icons/diamond-512.png",
         sizes: "512x512",
         type: "image/png",
         purpose: "any",
       },
       {
-        src: "/icons/nova-512-maskable.png",
+        src: "/icons/diamond-512-maskable.png",
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",

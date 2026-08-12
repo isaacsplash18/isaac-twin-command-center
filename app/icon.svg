@@ -10,8 +10,9 @@
     "shiny metal" comes from tonal contrast between facets, not from detail
     that would vanish when downsampled.
 
-    NOT the PWA/home-screen icon — app/apple-icon.png and public/icons/nova-*
-    stay Nova's face, on purpose.
+    The PWA/home-screen icons (app/apple-icon.png and public/icons/diamond-*)
+    are graphite-background PNG renders of this same mark, generated from
+    this SVG, so the tab favicon and the installed app icon match.
   -->
   <defs>
     <!-- crown: hot specular red at the upper-left light source, falling to oxbright -->

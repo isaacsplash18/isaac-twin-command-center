@@ -212,12 +212,15 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
           // Fluid width — fills whatever box she's given (full-bleed on
           // mobile, the centre grid column on desktop) instead of a capped
           // pixel size. Height rides the clip's portrait crop via
-          // aspect-ratio (same 1:1.15 proportion the old fixed px used, so
-          // the feather mask below needs no retuning — it's percentage-based
-          // and scales with the box). Capped at 90vh so a very wide desktop
-          // column doesn't produce an absurdly tall figure; object-fit:cover
-          // on the video means the cap never distorts or letterboxes her.
-          aspectRatio: "1 / 1.15",
+          // aspect-ratio — 1:0.92, i.e. the original 1:1.15 box shrunk 20%
+          // shorter so the bottom fifth of the clip's content is cropped off
+          // (see the <video> below for how — a naive box shrink alone would
+          // just crop the sides, since cover here is height-driven). The
+          // feather mask is percentage-based and scales with the box, so it
+          // needs no retuning. Capped at 90vh so a very wide desktop column
+          // doesn't produce an absurdly tall figure; object-fit:cover on the
+          // video means the cap never distorts or letterboxes her.
+          aspectRatio: "1 / 0.92",
           maxHeight: "90vh",
           willChange: "transform, filter",
         }}
@@ -237,8 +240,20 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
           >
             <video
               ref={videoRef}
-              className="absolute inset-0 h-full w-full"
-              style={{ objectFit: "cover", objectPosition: "center" }}
+              // Sized to 125% of the (now 20%-shorter) box height, not
+              // inset-0/h-full: at 125% of a 0.92-ratio box this element is
+              // exactly the same height cover would have rendered against
+              // the old 1.15-ratio box (1.25 × 0.92 = 1.15), so cover's
+              // framing inside the element is pixel-identical to before —
+              // nothing re-crops the sides. Pinned to the wrapper's top edge
+              // with overflow-hidden on the wrapper clipping the rest: that
+              // clips exactly the bottom 20% of this element, i.e. the
+              // bottom fifth of the previously-visible content, off the
+              // bottom. object-position stays centered — the element itself
+              // holds the old framing, so no repositioning is needed inside
+              // it.
+              className="absolute left-0 top-0 w-full"
+              style={{ height: "125%", objectFit: "cover", objectPosition: "center" }}
               src="/nova-hologram.mp4"
               muted
               playsInline
