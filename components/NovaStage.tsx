@@ -120,14 +120,14 @@ export function NovaStage({
       <Nova mood={asking ? "neutral" : mood} line={line} />
 
       {asking && q && (
-        // The question floats over the hologram's lower half — Nova is
-        // asking. Nova is now fluid-width (no fixed px size), so a fixed
-        // negative margin can't track her height across screen sizes; `top`
-        // as a percentage resolves against the containing block's *height*
-        // (unlike margin, which resolves against width), so it scales
-        // correctly at any width. 83%/68% match where the old -mt-16/-mt-40
-        // landed against her previous fixed-size box.
-        <div className="absolute inset-x-0 top-[83%] z-10 flex justify-center px-4 sm:top-[68%]">
+        // The question tucks over the hologram's lower edge — Nova is
+        // asking. Must stay IN FLOW (negative margin, not absolute top-%):
+        // an absolutely-positioned card contributes no height, so a tall
+        // question card painted straight over the approval queue below.
+        // The fixed overlap doesn't track Nova's fluid height exactly, but
+        // its worst case is covering a little more or less of her — never
+        // covering other content.
+        <div className="relative z-10 -mt-14 flex w-full justify-center px-4 sm:-mt-36">
           <div className="w-full max-w-xl border border-hairline bg-panel/90 p-4 shadow-[0_0_40px_rgba(0,0,0,0.6)] sm:p-5">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <span className="font-mono text-[11px] tracking-[0.15em] text-oxbright">
