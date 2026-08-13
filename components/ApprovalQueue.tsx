@@ -3,6 +3,7 @@
 import { AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { FrameCard } from "./FrameCard";
+import { isLoaded as isVoiceLoaded, load as loadVoice, speakText, stop as stopVoice, unlock as unlockVoice } from "./novaSpeech";
 import { postAction } from "./useApi";
 import { ContentItem, PLATFORM_TABS, PlatformKey, formatSgt, twinPulse } from "./types";
 
@@ -101,6 +102,90 @@ function DraftCard({
   const rejectRowRef = useRef<HTMLDivElement>(null);
   const blurCheckRef = useRef<number | null>(null);
 
+  // LISTEN — reads the draft aloud so it can be reviewed by ear. Shares
+  // Nova's speech engine (novaSpeech.ts): starting playback here stops any
+  // other card (and Nova's caption) that was talking, and vice versa — see
+  // that module's header for the contract.
+  const [voiceState, setVoiceState] = useState<"idle" | "loading" | "generating" | "playing" | "unavailable">("idle");
+  const [voicePercent, setVoicePercent] = useState(0);
+  // Bumped on every tap of THIS card's LISTEN button; engine callbacks only
+  // apply if they still match the session that fired them. Needed because a
+  // second tap on the same card (e.g. stop, then immediately retry) can
+  // leave a stale load()/speakText() callback in flight that would otherwise
+  // clobber the newer state — same guard pattern as Nova's own voice toggle.
+  const voiceSession = useRef(0);
+  // True only while this card is (or is trying to become) the active
+  // speaker. Read on unmount so we stop OUR audio, never someone else's.
+  const voiceActiveRef = useRef(false);
+
+  // Card unmounts on approve/reject (optimistic removal) or when a platform
+  // tab filter hides it — either way, if it was talking, cut it off. This is
+  // the backstop; act()/EDIT below also stop explicitly so audio doesn't
+  // linger through FrameCard's ~220ms exit sweep (the card stays mounted
+  // for that long after "removal").
+  useEffect(() => {
+    return () => {
+      if (voiceActiveRef.current) stopVoice();
+    };
+  }, []);
+
+  const stopMyVoice = () => {
+    if (!voiceActiveRef.current) return;
+    voiceSession.current += 1; // invalidate any in-flight load()/speakText() callbacks
+    voiceActiveRef.current = false;
+    stopVoice();
+    setVoiceState("idle");
+  };
+
+  const toggleListen = async () => {
+    if (voiceState === "loading" || voiceState === "generating" || voiceState === "playing") {
+      stopMyVoice();
+      return;
+    }
+    // Synchronous, before any await — iOS only unlocks a context touched
+    // during the gesture itself.
+    if (!unlockVoice()) {
+      setVoiceState("unavailable");
+      return;
+    }
+    const mine = (voiceSession.current += 1);
+    voiceActiveRef.current = true;
+    // A warm cache (model already instantiated this session, e.g. Nova's
+    // voice was used already) skips straight past LOADING.
+    if (!isVoiceLoaded()) {
+      setVoicePercent(0);
+      setVoiceState("loading");
+    }
+    try {
+      await loadVoice(setVoicePercent);
+    } catch {
+      if (voiceSession.current === mine) {
+        voiceActiveRef.current = false;
+        setVoiceState("unavailable");
+      }
+      return;
+    }
+    if (voiceSession.current !== mine) return; // superseded while loading
+    setVoiceState("generating");
+    speakText(item.body || item.title, {
+      onStart: () => {
+        if (voiceSession.current === mine) setVoiceState("playing");
+      },
+      onEnd: () => {
+        if (voiceSession.current === mine) {
+          voiceActiveRef.current = false;
+          setVoiceState("idle");
+        }
+      },
+      onError: () => {
+        if (voiceSession.current === mine) {
+          voiceActiveRef.current = false;
+          setVoiceState("unavailable");
+        }
+      },
+    });
+  };
+
   // Any pending deferred blur re-check (see onBlur below) must never fire
   // after this card unmounts — clear it on cleanup rather than let it run
   // against a detached ref.
@@ -120,6 +205,11 @@ function DraftCard({
   }, [editing, text]);
 
   const act = async (kind: "approve" | "reject", rejectReason?: string) => {
+    // The card unmounts optimistically right after this (onRemoved below),
+    // but FrameCard keeps it mounted through its exit sweep — stop here
+    // rather than relying solely on the unmount cleanup, so audio doesn't
+    // keep talking through that ~220ms.
+    stopMyVoice();
     setBusy(kind);
     if (kind === "approve") {
       // Copy while still inside the tap gesture (clipboard API requirement),
@@ -352,17 +442,46 @@ function DraftCard({
             <button
               type="button"
               disabled={busy !== null}
-              onClick={() => setRejecting(true)}
+              onClick={() => {
+                stopMyVoice();
+                setRejecting(true);
+              }}
               className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.1em] text-ink-dim hover:text-ink disabled:opacity-50 sm:min-h-0"
             >
               REJECT
             </button>
             <button
               type="button"
-              onClick={() => setEditing(true)}
+              onClick={() => {
+                stopMyVoice();
+                setEditing(true);
+              }}
               className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.1em] text-ink-dim hover:text-ink sm:min-h-0"
             >
               EDIT
+            </button>
+            <button
+              type="button"
+              onClick={toggleListen}
+              aria-pressed={voiceState === "playing"}
+              aria-label={voiceState === "playing" ? "Stop reading draft aloud" : "Read draft aloud"}
+              className={`flex min-h-11 items-center justify-center border px-4 py-2.5 font-mono text-xs tracking-[0.1em] sm:min-h-0 ${
+                voiceState === "playing"
+                  ? "border-oxbright/60 text-oxbright"
+                  : voiceState === "unavailable"
+                    ? "border-hairline text-ink-dim/60"
+                    : "border-hairline text-ink-dim hover:text-ink"
+              }`}
+            >
+              {voiceState === "loading"
+                ? `LOADING ${voicePercent}%`
+                : voiceState === "generating"
+                  ? "GENERATING…"
+                  : voiceState === "playing"
+                    ? "PLAYING ▍"
+                    : voiceState === "unavailable"
+                      ? "VOICE UNAVAILABLE"
+                      : "LISTEN"}
             </button>
           </>
         )}
