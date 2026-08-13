@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { isActive, isLoaded, load, setActive, speak, stop, unlock } from "./novaSpeech";
 
 /**
  * NOVA — the twin's face: a holographic video (public/nova-hologram.mp4) of
@@ -30,7 +31,7 @@ const TAIL_SECONDS = 2;
 
 export type NovaMood = "praise" | "sass" | "neutral";
 
-export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
+export function Nova({ mood, line, onToast }: { mood: NovaMood; line: string; onToast?: (message: string) => void }) {
   const [reduced, setReduced] = useState(false);
   const figureRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -285,8 +286,17 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
         {/* speaking overlay — sits above the video, outside the feather
             mask, so the caption stays crisp as she "speaks" it. Hidden
             entirely while a calibration question card is up (line is blank
-            then; the card is her voice at that point). */}
-        <NovaCaption line={line} />
+            then; the card is her voice at that point), which also parks the
+            VOICE toggle: it would otherwise sit under the card, and there is
+            nothing to speak anyway. Column anchored by its BOTTOM edge, so
+            the caption rides up above the toggle rather than the toggle
+            drifting down into the fade. */}
+        {line.trim() !== "" && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-[9%] z-10 flex flex-col items-center gap-1.5 px-6">
+            <NovaCaption line={line} />
+            <NovaVoiceToggle line={line} onToast={onToast} />
+          </div>
+        )}
       </div>
 
       <style>{`@keyframes nova-breathe {
@@ -300,8 +310,8 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
 /**
  * Typed speech line, overlaid directly on the lower video — like she's
  * speaking it, not a caption underneath the image. A dark scrim keeps the
- * mono text legible over her. Silent when blank — the calibration card takes
- * over as her voice while a question is up.
+ * mono text legible over her. Only mounted when there IS a line — the
+ * calibration card takes over as her voice while a question is up.
  */
 function NovaCaption({ line }: { line: string }) {
   const [typed, setTyped] = useState("");
@@ -321,23 +331,153 @@ function NovaCaption({ line }: { line: string }) {
     return () => clearInterval(id);
   }, [line]);
 
-  if (!line.trim()) return null;
+  return (
+    /* A self-contained caption chip, not a scrim bleeding across the box —
+       she's a floating hologram now (feathered edges), so anything wider
+       than the text itself would show as a stray rectangle rather than
+       blending into the video edge. Colour pinned to Splash "clay"
+       regardless of the page theme, since this chip is deliberately dark
+       — she's a lit screen, like captions on a video. */
+    <p
+      className="relative max-w-[88%] rounded px-3 py-1.5 text-center font-mono text-[11px] leading-relaxed tracking-wider text-[#e8e8e3]"
+      style={{ background: "rgba(6,7,8,0.82)" }}
+    >
+      <span className="text-oxbright">NOVA //</span> {typed}
+      <span className="animate-pulse text-oxbright">▍</span>
+    </p>
+  );
+}
+
+const VOICE_PREF_KEY = "nova-voice";
+
+type VoiceState = "off" | "loading" | "on" | "error";
+
+/**
+ * VOICE toggle — opt-in, never automatic. Kokoro-82M is a ~50-90MB download
+ * and browsers block un-gestured audio anyway, so the only way she ever
+ * speaks is a deliberate tap.
+ *
+ * The preference is remembered, but a remembered preference does NOT
+ * auto-resume on load: it only changes the resting label from VOICE to
+ * VOICE · MUTED. Auto-resuming would mean either an unprompted 50MB fetch or
+ * an AudioContext created outside a gesture that plays nothing — both worse
+ * than one extra tap.
+ */
+function NovaVoiceToggle({ line, onToast }: { line: string; onToast?: (message: string) => void }) {
+  // Lazy initial state, not a plain "off": this component unmounts every time
+  // a calibration card takes the stage, and coming back muted after the card
+  // clears would read as a bug. Safe for hydration — `active` is false on the
+  // server and on the first client render alike; it can only be true on a
+  // re-mount, which is client-only by then.
+  const [state, setState] = useState<VoiceState>(() => (isActive() && isLoaded() ? "on" : "off"));
+  const [percent, setPercent] = useState(0);
+  const [remembered, setRemembered] = useState(false);
+  // Guards a load() that resolves after the user has already tapped off —
+  // without it, a slow download would switch her on minutes later.
+  const attempt = useRef(0);
+
+  useEffect(() => {
+    try {
+      setRemembered(window.localStorage.getItem(VOICE_PREF_KEY) === "1");
+    } catch {
+      /* private mode / storage disabled — just don't remember */
+    }
+  }, []);
+
+  // Speak the full prop line, not the typewriter's partial text, and once per
+  // line — not per keystroke. Cleanup runs before the next line and on
+  // unmount (i.e. when a calibration card takes over), cutting audio dead.
+  useEffect(() => {
+    if (state !== "on") return;
+    if (!line.trim()) return;
+    let live = true;
+    speak(line).catch(() => {
+      if (!live) return;
+      setActive(false);
+      setState("error");
+      onToast?.("VOICE FAILED — SYNTHESIS ERROR ON THIS DEVICE");
+    });
+    return () => {
+      live = false;
+      stop();
+    };
+  }, [state, line, onToast]);
+
+  const remember = (wants: boolean) => {
+    try {
+      window.localStorage.setItem(VOICE_PREF_KEY, wants ? "1" : "0");
+    } catch {
+      /* storage unavailable — the toggle still works for this session */
+    }
+    setRemembered(wants);
+  };
+
+  const toggle = () => {
+    if (state === "on" || state === "loading") {
+      attempt.current += 1; // cancels an in-flight load
+      stop();
+      setActive(false);
+      setState("off");
+      remember(false);
+      return;
+    }
+
+    // Synchronous, before any await: iOS only unlocks a context touched
+    // during the gesture itself. No Web Audio at all means no voice — say so
+    // rather than sitting on a cheerful ON that never makes a sound.
+    if (!unlock()) {
+      setActive(false);
+      setState("error");
+      onToast?.("VOICE UNAVAILABLE — NO AUDIO SUPPORT IN THIS BROWSER");
+      return;
+    }
+    remember(true);
+    const mine = (attempt.current += 1);
+
+    // A warm cache (model already instantiated this session) skips the
+    // LOADING label entirely rather than flashing 0% for a frame.
+    if (!isLoaded()) {
+      setPercent(0);
+      setState("loading");
+    }
+    load(setPercent)
+      .then(() => {
+        if (attempt.current !== mine) return;
+        setActive(true);
+        setState("on");
+      })
+      .catch(() => {
+        if (attempt.current !== mine) return;
+        setActive(false);
+        setState("error");
+        onToast?.("VOICE UNAVAILABLE — MODEL COULD NOT LOAD ON THIS DEVICE");
+      });
+  };
+
+  const label =
+    state === "loading"
+      ? `VOICE · LOADING ${percent}%`
+      : state === "on"
+        ? "VOICE · ON"
+        : state === "error"
+          ? "VOICE · UNAVAILABLE"
+          : remembered
+            ? "VOICE · MUTED"
+            : "VOICE";
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-[9%] z-10 flex justify-center px-6">
-      {/* A self-contained caption chip, not a scrim bleeding across the box —
-          she's a floating hologram now (feathered edges), so anything wider
-          than the text itself would show as a stray rectangle rather than
-          blending into the video edge. Colour pinned to Splash "clay"
-          regardless of the page theme, since this chip is deliberately dark
-          — she's a lit screen, like captions on a video. */}
-      <p
-        className="relative max-w-[88%] rounded px-3 py-1.5 text-center font-mono text-[11px] leading-relaxed tracking-wider text-[#e8e8e3]"
-        style={{ background: "rgba(6,7,8,0.82)" }}
-      >
-        <span className="text-oxbright">NOVA //</span> {typed}
-        <span className="animate-pulse text-oxbright">▍</span>
-      </p>
-    </div>
+    <button
+      type="button"
+      onClick={toggle}
+      aria-pressed={state === "on"}
+      aria-label={state === "on" ? "Mute Nova's voice" : "Give Nova a voice"}
+      // pointer-events-auto: the overlay column above is pointer-events-none
+      // so the caption never eats taps meant for the hologram.
+      className={`pointer-events-auto flex min-h-11 items-center px-2 font-mono text-[11px] tracking-[0.1em] transition-colors sm:min-h-0 sm:py-1 ${
+        state === "on" ? "text-oxbright" : state === "error" ? "text-ink-dim/60" : "text-ink-dim hover:text-ink"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
