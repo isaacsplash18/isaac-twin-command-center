@@ -117,7 +117,7 @@ export function NovaStage({
 
   return (
     <div className="relative flex w-full flex-col items-center">
-      <Nova mood={asking ? "neutral" : mood} line={line} onToast={onToast} />
+      <Nova mood={asking ? "neutral" : mood} line={line} />
 
       {asking && q && (
         // The question tucks over the hologram's lower edge — Nova is
