@@ -337,6 +337,7 @@ All variables live in `.env` locally and must be mirrored into **Vercel → Proj
 | `SESSION_SECRET` | human | **yes** | HMAC-SHA256 key for the session cookie. Read by both middleware (Edge) and the login route (Node). |
 | `CRON_SECRET` | cron | **gating** | Bearer secret for `/api/cron/*`. **Unset ⇒ every cron request 401s** (fail-closed). Vercel sends it as `Authorization: Bearer …`. |
 | `HERMES_API_TOKEN` | machine | **gating** | Bearer secret for `/api/hermes/*`. **Unset ⇒ the entire machine lane is disabled** (all 401). Removing it from Vercel is the one-move kill switch for Hermes integration. |
+| `AGENT_API_TOKEN` | machine | **gating** | Bearer secret for `/api/agent/*` (docs/AGENT-API.md). Separate from `HERMES_API_TOKEN`. **Unset ⇒ the Agent API lane is disabled** (all 401). |
 | `TYPEFULLY_API_KEY` | publish | **gating** | Presence (with `PUBLISH_MODE ≠ "manual"`) is what sets `TYPEFULLY_ENABLED`. Unset ⇒ every platform is manual copy-paste. |
 | `TYPEFULLY_PLATFORMS` | publish | no | Comma-separated platform keys that may auto-publish once enabled. Case-insensitive, whitespace-trimmed. **Default when unset/empty: `x`.** |
 | `TYPEFULLY_SOCIAL_SET_ID` | publish | no | Pins a Typefully social set. Unset ⇒ the first social set on the account is resolved and cached per process. |
@@ -418,6 +419,8 @@ Implementation: `lib/machine-auth.ts` `isMachineAuthorized(req)`.
 - Constant-time compare of the whole `Authorization` header against the literal string `` `Bearer ${HERMES_API_TOKEN}` ``.
 - **Fails closed:** unset token ⇒ `false` ⇒ every `/api/hermes/*` request 401s. This is the one-move kill switch for the entire Hermes integration.
 - The token is never logged, never echoed, never included in any payload. `scripts/verify-hermes-export.ts` actively scans the whole export payload for any key matching `/token|secret|apikey|api_key|password|passphrase/i` and fails if one appears.
+
+**Agent API lane:** a fourth, structurally identical bearer lane — `AGENT_API_TOKEN` via `isAgentAuthorized()` in `lib/machine-auth.ts`, serving `/api/agent/*` (also in `PUBLIC_PREFIXES`). It is a separate secret from `HERMES_API_TOKEN` (independent revocation; the tokens are not interchangeable). Full reference: [`docs/AGENT-API.md`](./AGENT-API.md).
 
 ### 4.4 Middleware design
 
@@ -691,7 +694,7 @@ Contract:
 | `/api/items/[pageId]/edit` | POST | `{ text }` | `{ ok: true, body }` | `400` non-JSON body or empty text; `409` status ≠ `Draft` |
 | `/api/items/[pageId]/mark-posted` | POST | — | `{ ok: true }` | `409` status ≠ `Approved` |
 | `/api/items/[pageId]/unqueue` | POST | — | `{ ok: true }` | `409` status ≠ `Queued` |
-| `/api/items/[pageId]/publish-next` | POST | — | `{ slot, typefullyId }` | `500` on any guard failure (see note) |
+| `/api/items/[pageId]/publish-next` | POST | — | `{ slot, typefullyId }` | `400` IG / page not in a configured DB; `409` status ≠ `Approved` or already in Typefully |
 
 ### Cron lane (`Bearer CRON_SECRET` or `x-cron-secret`)
 
@@ -711,6 +714,10 @@ Both `401` on a bad/missing secret and `500` on an unexpected throw.
 | `/api/hermes/drafts` | POST | `{ platform, title, body, sourcePositionIds?, sourceWorkflow?, humanizerStatus?, createdBy? }` | `201 { id, url, platform, status: "Draft", warnings }` | `400` validation; `401`; `500` |
 | `/api/hermes/decisions` | POST | `{ pageId, action: "approve"\|"reject"\|"edit", editedText?, reason?, source?, idempotencyKey? }` | `200 { ok, pageId, action, status, noop, idempotencyKey? }` | `400` validation; `401`; other `ActionError` statuses pass through; `500` |
 
+### Agent API lane (`Bearer AGENT_API_TOKEN`)
+
+`/api/agent/{state,drafts,kpis,proposals}` plus `POST /api/agent/items/[pageId]/{approve,reject,edit,mark-posted,publish-next}` and `POST /api/agent/proposals/[id]/{accept,reject}` — all responses `{ version: 1, … }`, errors `{ error }`. Wraps the same `lib/` cores as the human lane (calibration source `agent`). Full endpoint reference, idempotency rules and curl examples: [`docs/AGENT-API.md`](./AGENT-API.md).
+
 ### Error conventions
 
 - **`handleAction`** (`lib/route-helpers.ts`) wraps most human-lane mutations: an `ActionError` becomes `{ error }` at its own status; anything else is `console.error`'d and returned as `500 { error: err.message }`.
@@ -718,7 +725,7 @@ Both `401` on a bad/missing secret and `500` on an unexpected throw.
 - **`/api/hermes/decisions` 409 → 200 noop semantics.** For the machine lane, "someone already decided this" — a duplicate reply, or Isaac deciding in the web UI first — is a **success, not a failure**. A `409` from the wrapped action is translated into `200 { ok: true, noop: true, note: "already-decided", status: <re-read status or null> }`. Every other error passes through unchanged. This is what makes re-POSTing the same decision replay-safe. Idempotency in v1 is **status-based**, not key-based; `idempotencyKey` is accepted and echoed for the caller's logs only.
 - **`edit` on the machine lane is one logical EDIT-APPROVE**: `editItem` then `approveItem`. One reply = one decision. It produces both an `edit` and an `approve` Calibration Event, and a Pipeline Event of `Approved-with-edits`.
 - `source` on the machine lane defaults to `"telegram"`; an explicit valid value overrides. An invalid value falls back rather than erroring — `source` is a log tag, not authorization.
-- **Note on `/publish-next`:** `publishOne()` throws plain `Error`s (not `ActionError`) for its guards ("Only Approved items can be published", "Item is already in Typefully", "IG items are posted manually"), so those surface as **`500`**, not `409`. This is an inconsistency worth fixing on a rebuild.
+- **Note on `/publish-next`:** `publishOne()` now throws `ActionError` for its guards (`400` IG items / unconfigured page, `409` not `Approved` / already in Typefully), so they no longer surface as `500` (fixed with the Agent API).
 - Raw `err.message` reaches 500 bodies — an accepted LOW risk (§11).
 
 ---

@@ -15,6 +15,7 @@ import { getPage, logEvent, queryDataSource, readBody, readDateProp, readRichTex
 import { nextFreeSlot, SchedulablePlatform } from "./scheduling";
 import { createScheduledDraft, deleteDraft, getDraftState } from "./typefully";
 import { platformFromPage } from "./items";
+import { ActionError } from "./actions";
 
 export interface PublishResult {
   scheduled: { pageId: string; platform: string; slot: string; typefullyId: string }[];
@@ -123,10 +124,12 @@ export async function runPublisher(): Promise<PublishResult> {
 export async function publishOne(pageId: string): Promise<{ slot: string; typefullyId: string }> {
   const page = await getPage(pageId);
   const p = platformFromPage(page);
-  if (!p) throw new Error("Page does not belong to a configured content database");
-  if (!p.autoPublish) throw new Error("IG items are posted manually");
-  if (readStatus(page) !== "Approved") throw new Error("Only Approved items can be published");
-  if (readRichTextProp(page, "Typefully ID")) throw new Error("Item is already in Typefully");
+  // ActionErrors (not plain Errors) so callers get 400/409 instead of 500; the
+  // human-lane UI only reads `{ error }` so it is unaffected by the status change.
+  if (!p) throw new ActionError("Page does not belong to a configured content database", 400);
+  if (!p.autoPublish) throw new ActionError("IG items are posted manually", 400);
+  if (readStatus(page) !== "Approved") throw new ActionError("Only Approved items can be published");
+  if (readRichTextProp(page, "Typefully ID")) throw new ActionError("Item is already in Typefully");
   const item = {
     id: page.id,
     notionUrl: page.url,
