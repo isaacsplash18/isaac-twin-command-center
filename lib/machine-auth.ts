@@ -13,9 +13,22 @@
 import { NextRequest } from "next/server";
 import { timingSafeEqualStr } from "./auth";
 
-export function isMachineAuthorized(req: NextRequest): boolean {
-  const secret = process.env.HERMES_API_TOKEN;
+function bearerMatches(req: NextRequest, secret: string | undefined): boolean {
   if (!secret) return false;
   const auth = req.headers.get("authorization") ?? "";
   return timingSafeEqualStr(auth, `Bearer ${secret}`);
+}
+
+export function isMachineAuthorized(req: NextRequest): boolean {
+  return bearerMatches(req, process.env.HERMES_API_TOKEN);
+}
+
+/**
+ * Agent API lane (/api/agent/* — docs/AGENT-API.md): same check against
+ * AGENT_API_TOKEN. Deliberately a separate secret from HERMES_API_TOKEN so
+ * each lane is revoked independently (unset one ⇒ only that lane 401s) and a
+ * leaked Hermes token can't drive the agent endpoints or vice versa.
+ */
+export function isAgentAuthorized(req: NextRequest): boolean {
+  return bearerMatches(req, process.env.AGENT_API_TOKEN);
 }

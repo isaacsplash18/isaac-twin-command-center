@@ -22,7 +22,7 @@ import { queryCalibrationEvents } from "@/lib/calibration-events";
 import { queryProposals } from "@/lib/proposals";
 import { PLATFORMS, TYPEFULLY_ENABLED } from "@/lib/config";
 import { itemsWithStatus } from "@/lib/items";
-import { queryEvents, readSelectProp } from "@/lib/notion";
+import { publishFailures24h } from "@/lib/kpis";
 
 export const dynamic = "force-dynamic";
 
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
     // Each lane degrades independently: a transient Notion error on a
     // *configured* lane returns an empty result + a warning rather than 500ing
     // the whole export (the documented "degrades gracefully" contract).
-    const [events, pending, accepted, pipelineEvents24h] = await Promise.all([
+    const [events, pending, accepted, failures24h] = await Promise.all([
       queryCalibrationEvents({ sinceIso: since, limit }).catch((err) => {
         warnings.push(`calibration events query failed: ${err instanceof Error ? err.message : String(err)}`);
         return [];
@@ -81,9 +81,8 @@ export async function GET(req: NextRequest) {
       }),
       // Publish failures in the last 24h, from the Pipeline Events KPI log
       // (Phase 10 — same source as the dashboard's failure banner).
-      queryEvents(new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()).catch(() => []),
+      publishFailures24h().catch(() => 0),
     ]);
-    const failures24h = pipelineEvents24h.filter((e) => readSelectProp(e, "Event") === "Publish-failed").length;
 
     // drafts.pendingReview: count of Status=Draft across the 4 content DBs.
     // Each platform lane degrades independently — an unconfigured or

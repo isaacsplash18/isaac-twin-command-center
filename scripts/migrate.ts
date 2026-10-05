@@ -13,7 +13,8 @@
  *    and prints its data source id for DS_EVENTS.
  * 4. Creates the "Calibration Events" DB under the Constitution hub if
  *    missing (Phase 3 — see docs/hermes-calibration-plan.md §4.1) and prints
- *    its data source id for DS_CALIBRATION_EVENTS.
+ *    its data source id for DS_CALIBRATION_EVENTS. Also adds the "agent" Source
+ *    option (Agent API) to an already-existing Calibration Events DB.
  * 5. Creates the "Position Proposals" DB under the Constitution hub if
  *    missing (Phase 4 — see docs/hermes-calibration-plan.md §4.2) and prints
  *    its data source id for DS_PROPOSALS. Also runs an additive property-patch
@@ -241,6 +242,31 @@ async function ensureCalibrationEventsDb(): Promise<void> {
     (ds: Json) => ((ds.title ?? []).map((t: Json) => t.plain_text).join("") || "").trim() === "Calibration Events"
   );
   if (existing) {
+    // Additive option pass (Agent API): add the "agent" Source option to an
+    // ALREADY-EXISTING DB — same full-list PATCH as the Status-option pass, so
+    // existing options keep their ids/colours. Never removes anything.
+    const dsFull = await notion(`/data_sources/${existing.id}`);
+    const sourceDef: Json = dsFull.properties?.Source;
+    if (sourceDef?.type === "select") {
+      const opts: Json[] = sourceDef.select?.options ?? [];
+      if (opts.some((o: Json) => o.name === "agent")) {
+        console.log(`  = Source option "agent" already present`);
+      } else {
+        await notion(`/data_sources/${existing.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            properties: {
+              Source: {
+                select: { options: [...opts.map((o: Json) => ({ name: o.name, color: o.color })), { name: "agent" }] },
+              },
+            },
+          }),
+        });
+        console.log(`  + Source option added: agent`);
+      }
+    } else {
+      console.log(`  ! No select-type "Source" property found — add option "agent" manually`);
+    }
     console.log(`  = Already exists. DS_CALIBRATION_EVENTS=${existing.id}`);
     return;
   }
@@ -254,7 +280,7 @@ async function ensureCalibrationEventsDb(): Promise<void> {
           Name: { title: {} },
           Source: {
             select: {
-              options: [{ name: "command_center" }, { name: "telegram" }, { name: "hermes" }],
+              options: [{ name: "command_center" }, { name: "telegram" }, { name: "hermes" }, { name: "agent" }],
             },
           },
           "Object Type": {

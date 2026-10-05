@@ -9,6 +9,7 @@ import {
   buildStatusUpdate,
   findProperty,
   getDataSourceSchema,
+  getPage,
   notionFetch,
   queryDataSource,
   readBody,
@@ -264,4 +265,89 @@ export async function createDraft(input: CreateDraftInput): Promise<CreateDraftR
   }
 
   return { id: page.id, url: page.url, platform: platformKey, status: "Draft", warnings };
+}
+
+// ---------------------------------------------------------------------------
+// Machine-lane helpers shared by /api/hermes/drafts and /api/agent/drafts
+// ---------------------------------------------------------------------------
+
+export interface PendingDraft {
+  pageId: string;
+  platform: string;
+  title: string;
+  body: string;
+  humanizer: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+/**
+ * Pending-review drafts (Status=Draft) across the content DBs, newest first,
+ * full bodies. Each platform lane degrades independently — an unconfigured or
+ * not-yet-migrated DS is skipped and reported in `warnings`, never failing the
+ * whole call (missing select option = schema not migrated yet: skipped silently).
+ */
+export async function listPendingDrafts(): Promise<{ drafts: PendingDraft[]; warnings: string[] }> {
+  const drafts: PendingDraft[] = [];
+  const warnings: string[] = [];
+  await Promise.all(
+    PLATFORMS.map(async (p) => {
+      if (!process.env[p.dsEnv]) {
+        warnings.push(`${p.dsEnv} not configured — ${p.label} skipped`);
+        return;
+      }
+      try {
+        const items = await itemsWithStatus(p, "Draft", { withBody: true, limit: 100 });
+        for (const item of items) {
+          // Humanizer / Created By are additive provenance props (Phase 7) not
+          // carried on ContentItem — read them off the page. readSelectProp
+          // returns "" when the prop is absent (pre-migration), never throws.
+          let humanizer = "";
+          let createdBy = "";
+          try {
+            const page = await getPage(item.id);
+            humanizer = readSelectProp(page, "Humanizer") ?? "";
+            createdBy = readSelectProp(page, "Created By") ?? "";
+          } catch {
+            // Provenance is optional — a read failure here must not drop the draft.
+          }
+          drafts.push({
+            pageId: item.id,
+            platform: item.platform,
+            title: item.title,
+            body: item.body,
+            humanizer,
+            createdBy,
+            createdAt: item.createdTime,
+          });
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (!message.includes("not found for property")) {
+          warnings.push(`${p.label} draft list failed: ${message}`);
+        }
+      }
+    })
+  );
+  drafts.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+  return { drafts, warnings };
+}
+
+/** Coerce a parsed JSON body into CreateDraftInput (validation proper stays in createDraft). */
+export function parseDraftInput(b: Record<string, unknown>): CreateDraftInput {
+  const humanizerStatus = ["passed", "failed", "unknown"].includes(b.humanizerStatus as string)
+    ? (b.humanizerStatus as "passed" | "failed" | "unknown")
+    : undefined;
+  const createdBy = ["hermes", "agent"].includes(b.createdBy as string)
+    ? (b.createdBy as "hermes" | "agent")
+    : undefined;
+  return {
+    platform: String(b.platform ?? ""),
+    title: String(b.title ?? ""),
+    body: String(b.body ?? ""),
+    sourcePositionIds: Array.isArray(b.sourcePositionIds) ? b.sourcePositionIds.map(String) : undefined,
+    sourceWorkflow: b.sourceWorkflow != null ? String(b.sourceWorkflow) : undefined,
+    humanizerStatus,
+    createdBy,
+  };
 }

@@ -7,7 +7,7 @@
 import { PLATFORM_EVENT_NAMES } from "./config";
 import { readItemBody, toContentItem, platformFromPage } from "./items";
 import { CalibrationPlatform, CalibrationSource, logCalibrationEvent } from "./calibration-events";
-import { maybeCreateAmendmentFromDraftEvent } from "./proposals";
+import { getProposal, maybeCreateAmendmentFromDraftEvent, setProposalStatus } from "./proposals";
 import {
   buildStatusUpdate,
   getPage,
@@ -232,4 +232,21 @@ export async function unqueueItem(pageId: string) {
     "Scheduled At": { date: null },
   });
   return { ok: true };
+}
+
+/**
+ * Proposal accept/reject with the pending-only guard (shared by the session
+ * routes and /api/agent/proposals/[id]/*). Status flip only — `accepted` never
+ * applies anything to canonical identity (plan §8 rule 5). Re-reads before
+ * write; 409 when the proposal has already moved on.
+ */
+export async function decideProposal(id: string, decision: "accepted" | "rejected") {
+  const current = await getProposal(id);
+  if (current.status !== "pending") {
+    throw new ActionError(
+      `Cannot ${decision === "accepted" ? "accept" : "reject"} a proposal with status "${current.status}"`,
+      409
+    );
+  }
+  return setProposalStatus(id, decision);
 }

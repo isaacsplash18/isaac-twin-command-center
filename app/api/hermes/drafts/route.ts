@@ -24,21 +24,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { isMachineAuthorized } from "@/lib/machine-auth";
-import { PLATFORMS } from "@/lib/config";
-import { createDraft, DraftInputError, itemsWithStatus } from "@/lib/items";
-import { getPage, readSelectProp } from "@/lib/notion";
+import { createDraft, DraftInputError, listPendingDrafts, parseDraftInput } from "@/lib/items";
 
 export const dynamic = "force-dynamic";
-
-interface PendingDraft {
-  pageId: string;
-  platform: string;
-  title: string;
-  body: string;
-  humanizer: string;
-  createdBy: string;
-  createdAt: string;
-}
 
 export async function GET(req: NextRequest) {
   if (!isMachineAuthorized(req)) {
@@ -54,53 +42,9 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const drafts: PendingDraft[] = [];
-    // Each platform lane degrades independently — an unconfigured or
-    // not-yet-migrated DS is skipped (logged), never failing the whole call.
-    await Promise.all(
-      PLATFORMS.map(async (p) => {
-        if (!process.env[p.dsEnv]) {
-          console.warn(`GET /api/hermes/drafts: ${p.dsEnv} not configured — ${p.label} skipped`);
-          return;
-        }
-        try {
-          const items = await itemsWithStatus(p, "Draft", { withBody: true, limit: 100 });
-          for (const item of items) {
-            // Humanizer / Created By are additive provenance props (Phase 7) not
-            // carried on ContentItem — read them off the page. readSelectProp
-            // returns "" when the prop is absent (pre-migration), never throws.
-            let humanizer = "";
-            let createdBy = "";
-            try {
-              const page = await getPage(item.id);
-              humanizer = readSelectProp(page, "Humanizer") ?? "";
-              createdBy = readSelectProp(page, "Created By") ?? "";
-            } catch {
-              // Provenance is optional — a read failure here must not drop the draft.
-            }
-            drafts.push({
-              pageId: item.id,
-              platform: item.platform,
-              title: item.title,
-              body: item.body,
-              humanizer,
-              createdBy,
-              createdAt: item.createdTime,
-            });
-          }
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          // Missing select option = schema not migrated yet; not a hard failure.
-          if (!message.includes("not found for property")) {
-            console.warn(`GET /api/hermes/drafts: ${p.label} draft list failed: ${message}`);
-          }
-        }
-      })
-    );
-
-    // Newest first across all platforms (Notion created_time descending).
-    drafts.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
-
+    // Derivation shared with /api/agent/drafts (lib/items.ts listPendingDrafts).
+    const { drafts, warnings } = await listPendingDrafts();
+    for (const w of warnings) console.warn(`GET /api/hermes/drafts: ${w}`);
     return NextResponse.json(drafts);
   } catch (err) {
     console.error("GET /api/hermes/drafts failed:", err);
@@ -122,23 +66,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Request body must be JSON" }, { status: 400 });
     }
 
-    const b = body as Record<string, unknown>;
-    const humanizerStatus = ["passed", "failed", "unknown"].includes(b.humanizerStatus as string)
-      ? (b.humanizerStatus as "passed" | "failed" | "unknown")
-      : undefined;
-    const createdBy = ["hermes", "agent"].includes(b.createdBy as string)
-      ? (b.createdBy as "hermes" | "agent")
-      : undefined;
-
-    const result = await createDraft({
-      platform: String(b.platform ?? ""),
-      title: String(b.title ?? ""),
-      body: String(b.body ?? ""),
-      sourcePositionIds: Array.isArray(b.sourcePositionIds) ? b.sourcePositionIds.map(String) : undefined,
-      sourceWorkflow: b.sourceWorkflow != null ? String(b.sourceWorkflow) : undefined,
-      humanizerStatus,
-      createdBy,
-    });
+    const result = await createDraft(parseDraftInput(body as Record<string, unknown>));
 
     return NextResponse.json(result, { status: 201 });
   } catch (err) {
