@@ -12,6 +12,7 @@ export function useApi<T>(url: string, refreshMs = 60_000) {
   const refresh = useCallback(async () => {
     if (inflight.current) return;
     inflight.current = true;
+    setLoading(true);
     try {
       const res = await fetch(url, { cache: "no-store" });
       if (res.status === 401) {
@@ -44,7 +45,10 @@ export function useApi<T>(url: string, refreshMs = 60_000) {
   return { data, error, loading, refresh, setData };
 }
 
-export async function postAction(path: string, body?: unknown): Promise<{ ok: boolean; error?: string }> {
+export async function postAction(
+  path: string,
+  body?: unknown,
+): Promise<{ ok: boolean; error?: string }> {
   try {
     const res = await fetch(path, {
       method: "POST",
@@ -55,6 +59,9 @@ export async function postAction(path: string, body?: unknown): Promise<{ ok: bo
     const json = await res.json().catch(() => ({}));
     return { ok: false, error: json?.error || `HTTP ${res.status}` };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Network error" };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Network error",
+    };
   }
 }

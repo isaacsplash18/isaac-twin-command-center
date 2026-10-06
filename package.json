@@ -17,7 +17,9 @@
     "verify:identity-calibration": "tsx scripts/verify-identity-calibration.ts",
     "verify:agent-api": "tsx scripts/verify-agent-api.ts",
     "verify:typefully": "tsx scripts/verify-typefully.ts",
-    "export:twin": "tsx scripts/export-twin-context.ts"
+    "export:twin": "tsx scripts/export-twin-context.ts",
+    "test:ui": "playwright test",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@paper-design/shaders-react": "0.0.77",
@@ -28,6 +30,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",

@@ -1,145 +1,158 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 export interface PaletteAction {
   id: string;
   label: string;
   hint?: string;
+  keywords?: string;
   run: () => void;
 }
 
-/**
- * Signature element #3 (PRD §5.3): ⌘K / Ctrl-K on desktop, long-press
- * anywhere on mobile. Approve/reject by keyboard, jump to platform,
- * publish next slot, search drafts.
- */
+/** Search and run common actions from a keyboard- and touch-friendly dialog. */
 export function CommandPalette({ actions }: { actions: PaletteAction[] }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(0);
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // ⌘K / Ctrl-K
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setOpen((o) => !o);
-      } else if (e.key === "Escape") {
-        setOpen(false);
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (open && !dialog.open) {
+      dialog.showModal();
+      setQuery("");
+      setCursor(0);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    } else if (!open && dialog.open) {
+      dialog.close();
+    }
+  }, [open]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setOpen((value) => !value);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Long-press (600ms) on mobile, ignoring presses that start on buttons/inputs/links
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const start = (e: TouchEvent) => {
-      const t = e.target as HTMLElement;
-      if (t.closest("button, a, input, textarea")) return;
-      timer = setTimeout(() => setOpen(true), 600);
-    };
-    const cancel = () => timer && clearTimeout(timer);
-    window.addEventListener("touchstart", start, { passive: true });
-    window.addEventListener("touchend", cancel);
-    window.addEventListener("touchmove", cancel);
-    return () => {
-      window.removeEventListener("touchstart", start);
-      window.removeEventListener("touchend", cancel);
-      window.removeEventListener("touchmove", cancel);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (open) {
-      setQuery("");
-      setCursor(0);
-      setTimeout(() => inputRef.current?.focus(), 30);
-    }
-  }, [open]);
-
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return actions;
-    return actions.filter((a) => a.label.toLowerCase().includes(q));
+    return q
+      ? actions.filter((action) =>
+          `${action.label} ${action.keywords || ""}`.toLowerCase().includes(q),
+        )
+      : actions;
   }, [actions, query]);
 
-  const runAction = (a: PaletteAction | undefined) => {
-    if (!a) return;
+  const runAction = (action: PaletteAction | undefined) => {
+    if (!action) return;
     setOpen(false);
-    a.run();
+    action.run();
   };
 
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          className="fixed inset-0 z-[90] flex items-start justify-center bg-black/60 p-4 pt-[12vh]"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.12 }}
+    <>
+      <button
+        type="button"
+        aria-label="Search & commands"
+        className="btn btn-secondary"
+        onClick={() => setOpen(true)}
+      >
+        <span aria-hidden="true" className="text-xl sm:hidden">
+          ⌕
+        </span>
+        <span className="hidden sm:inline">Search &amp; commands</span>{" "}
+        <kbd className="ml-2 hidden text-xs opacity-65 xl:inline">
+          ⌘K / Ctrl K
+        </kbd>
+      </button>
+      <dialog
+        ref={dialogRef}
+        aria-labelledby="command-palette-title"
+        onClose={() => setOpen(false)}
+        onClick={(event) => {
+          if (event.target === dialogRef.current) setOpen(false);
+        }}
+        className="m-auto w-[calc(100%_-_2rem)] max-w-[560px] overflow-hidden rounded-2xl border border-stone-200 bg-white p-0 text-stone-900 shadow-2xl backdrop:bg-stone-950/45"
+      >
+        <h2 id="command-palette-title" className="sr-only">
+          Search and commands
+        </h2>
+        <button
+          type="button"
+          aria-label="Close search"
+          className="btn btn-quiet float-right m-2"
           onClick={() => setOpen(false)}
         >
-          <motion.div
-            className="glass relative w-full max-w-lg overflow-hidden border border-hairline shadow-2xl"
-            initial={{ y: -8, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.15 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <input
-              ref={inputRef}
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setCursor(0);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "ArrowDown") {
-                  e.preventDefault();
-                  setCursor((c) => Math.min(c + 1, filtered.length - 1));
-                } else if (e.key === "ArrowUp") {
-                  e.preventDefault();
-                  setCursor((c) => Math.max(c - 1, 0));
-                } else if (e.key === "Enter") {
-                  e.preventDefault();
-                  runAction(filtered[cursor]);
-                }
-              }}
-              placeholder="Command or search…"
-              className="w-full border-b border-hairline bg-transparent px-4 py-3 font-mono text-sm text-ink placeholder:text-ink-dim/60 focus:outline-none"
-            />
-            <ul className="max-h-[50vh] overflow-y-auto py-1">
-              {filtered.length === 0 && (
-                <li className="px-4 py-3 font-mono text-xs text-ink-dim">No matches.</li>
-              )}
-              {filtered.map((a, i) => (
-                <li key={a.id}>
-                  <button
-                    type="button"
-                    onMouseEnter={() => setCursor(i)}
-                    onClick={() => runAction(a)}
-                    className={`flex w-full items-baseline justify-between gap-3 px-4 py-2.5 text-left text-sm ${
-                      i === cursor ? "bg-ink/5 text-ink" : "text-ink-dim"
-                    }`}
-                  >
-                    <span>{a.label}</span>
-                    {a.hint && <span className="font-mono text-[11px] tracking-wider text-ink-dim/70">{a.hint}</span>}
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <div className="border-t border-hairline-faint px-4 py-2 font-mono text-[11px] tracking-wider text-ink-dim/60">
-              ↑↓ NAVIGATE · ↵ RUN · ESC CLOSE
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+          Close
+        </button>
+        <input
+          ref={inputRef}
+          aria-label="Search drafts and commands"
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setCursor(0);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              if (filtered.length)
+                setCursor((value) => Math.min(value + 1, filtered.length - 1));
+            } else if (event.key === "ArrowUp") {
+              event.preventDefault();
+              if (filtered.length) setCursor((value) => Math.max(value - 1, 0));
+            } else if (event.key === "Enter") {
+              event.preventDefault();
+              runAction(filtered[cursor]);
+            }
+          }}
+          placeholder="Search drafts and commands…"
+          className="w-full border-0 border-b border-stone-200 bg-transparent px-5 py-4 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-0"
+        />
+        <p className="sr-only" aria-live="polite">
+          {filtered[cursor]?.label || "No matching commands"}
+        </p>
+        <ul
+          aria-label="Available actions"
+          className="max-h-[55vh] overflow-y-auto p-2"
+        >
+          {filtered.length === 0 ? (
+            <li className="px-3 py-4 text-sm text-stone-500">
+              No matching actions.
+            </li>
+          ) : (
+            filtered.map((action, index) => (
+              <li key={action.id}>
+                <button
+                  type="button"
+                  onMouseEnter={() => setCursor(index)}
+                  onClick={() => runAction(action)}
+                  aria-current={index === cursor ? "true" : undefined}
+                  className={`flex w-full items-center justify-between gap-4 rounded-lg px-3 py-3 text-left text-sm ${index === cursor ? "bg-stone-100 text-stone-900" : "text-stone-700 hover:bg-stone-50"}`}
+                >
+                  <span>{action.label}</span>
+                  {action.hint && (
+                    <span className="shrink-0 text-sm text-stone-500">
+                      {action.hint}
+                    </span>
+                  )}
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+        <div className="border-t border-stone-200 px-5 py-3 text-sm text-stone-500">
+          Use ↑ and ↓ to navigate, Enter to run, and Escape to close.
+        </div>
+      </dialog>
+    </>
   );
 }

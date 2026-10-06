@@ -42,12 +42,13 @@
      form for a space-separated channel triplet + a separately-toggled alpha
      custom property, and is the same visual value the plan specifies. */
   background: rgb(var(--glass-tint) / var(--glass-alpha));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur))
+    saturate(var(--glass-saturate));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   box-shadow:
-    inset 0 1px 0 var(--glass-specular), /* specular top edge */
-    inset 0 0 0 1px var(--glass-edge), /* refraction hairline */
-    0 1px 2px rgba(25, 26, 28, 0.04),
+    inset 0 1px 0 var(--glass-specular),
+    /* specular top edge */ inset 0 0 0 1px var(--glass-edge),
+    /* refraction hairline */ 0 1px 2px rgba(25, 26, 28, 0.04),
     0 10px 28px -14px rgba(25, 26, 28, 0.14); /* float */
 }
 /* faint diagonal sheen — the "wet" read; pointer-events:none */
@@ -56,12 +57,18 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 38%);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.22) 0%,
+    rgba(255, 255, 255, 0) 38%
+  );
   mix-blend-mode: screen;
 }
 
 /* No-backdrop-filter fallback (old browsers): opaque clay, no glass. */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
   .glass {
     background: var(--color-panel);
   }
@@ -119,7 +126,7 @@
     rgba(255, 255, 255, 0.55) 0%,
     rgba(255, 255, 255, 0.22) 34%,
     rgba(255, 255, 255, 0) 58%,
-    rgba(25, 26, 28, 0.030) 100%
+    rgba(25, 26, 28, 0.03) 100%
   );
 }
 
@@ -130,24 +137,40 @@
 
 /* Status dot — pulses (2s ease) only for QUEUED. */
 @keyframes dot-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.25; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
 }
 .dot-pulse {
   animation: dot-pulse 2s ease-in-out infinite;
 }
 
 @keyframes ticker-fade {
-  0% { opacity: 0; transform: translateY(4px); }
-  8%, 92% { opacity: 1; transform: translateY(0); }
-  100% { opacity: 0; transform: translateY(-4px); }
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  8%,
+  92% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
 }
 .ticker-item {
   animation: ticker-fade 6s ease-in-out;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dot-pulse, .ticker-item {
+  .dot-pulse,
+  .ticker-item {
     animation: none !important;
   }
   * {
@@ -159,4 +182,80 @@
 * {
   scrollbar-width: thin;
   scrollbar-color: rgba(25, 26, 28, 0.18) transparent;
+}
+
+/* Shared controls keep the daily workflow readable and touch friendly. */
+.btn {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  cursor: pointer;
+  transition:
+    background-color 120ms,
+    color 120ms;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.btn-primary {
+  background: var(--color-oxblood);
+  color: white;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-oxbright);
+}
+.btn-secondary {
+  background: #f3f3ef;
+  color: var(--color-ink);
+  border: 1px solid var(--color-hairline);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: #e8e8e3;
+}
+.btn-quiet {
+  color: var(--color-ink-dim);
+}
+.btn-quiet:hover:not(:disabled) {
+  background: #f3f3ef;
+  color: var(--color-ink);
+}
+.panel-heading {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+:where(button, a, input, textarea, select, summary):focus-visible {
+  outline: 2px solid var(--color-oxblood);
+  outline-offset: 3px;
+}
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+input,
+textarea,
+select {
+  font-size: 16px;
+}
+html {
+  scroll-padding-top: 100px;
+}
+@media (max-width: 767px) {
+  .mobile-navigation {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .review-actions {
+    bottom: calc(76px + env(safe-area-inset-bottom));
+  }
 }
