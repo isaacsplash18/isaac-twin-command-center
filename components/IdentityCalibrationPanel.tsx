@@ -50,7 +50,7 @@ const TARGET_OPTIONS: TargetType[] = [
 ];
 
 const ACCEPT_TOAST =
-  "Accepted and saved in Notion. Your guidelines are unchanged until this suggestion is applied during review.";
+  "Accepted. Open Apply approved improvements to preview and apply this amendment in Notion.";
 
 /** PATCH an amendment (edit proposed text / reclassify). */
 async function patchAmendment(
@@ -163,7 +163,7 @@ export function IdentityCalibrationPanel({
       <h2 className="panel-heading">Suggested improvements</h2>
       <p className="mt-1 break-words text-[13px] leading-snug text-ink-dim/80">
         Accepting a suggestion saves it for review. It does not change your
-        Personal Constitution in Notion; those changes must be applied separately.
+        Personal Constitution in Notion until you preview and apply the amendment below.
       </p>
 
       {loading && !data && (
@@ -391,8 +391,8 @@ function AmendmentCard({
           />
         )}
         <MiniBtn
-          label="Accept"
-          disabled={busy}
+          label={a.targetType === "unclassified" ? "Choose a category first" : "Accept"}
+          disabled={busy || a.targetType === "unclassified"}
           onClick={() => onDecide(a, "accept")}
         />
         <MiniBtn

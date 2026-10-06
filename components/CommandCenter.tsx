@@ -16,6 +16,10 @@ import { AutomationsPanel, InputsPanel, PositionsPanel } from "./SidePanels";
 import { postAction, useApi } from "./useApi";
 import { PanelsData, PlatformKey, QueueData, formatSgt } from "./types";
 
+import { TrainingProgressPanel } from "./TrainingProgressPanel";
+import { TrainingEvaluationPanel } from "./TrainingEvaluationPanel";
+import { ApplySuggestionsPanel } from "./ApplySuggestionsPanel";
+
 type View = "review" | "schedule" | "train" | "more";
 const VIEWS: { id: View; label: string; icon: string }[] = [
   { id: "review", label: "Review", icon: "▤" },
@@ -471,6 +475,9 @@ export function CommandCenter() {
               />
             </FrameCard>
             <IdentityCalibrationPanel index={0} onError={toast} />
+            <ApplySuggestionsPanel />
+            <TrainingProgressPanel index={2} />
+            <TrainingEvaluationPanel index={3} />
           </div>
         )}
         {view === "more" && (

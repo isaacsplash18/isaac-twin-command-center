@@ -67,10 +67,13 @@ export interface PositionUpdateProposal {
   targetType: ProposalTargetType;
   /** Platform key for workflow/voice amendments, free label otherwise. "" when absent. */
   targetRef: string;
+  appliedUrl?: string;
+  appliedAt?: string;
+  appliedRevision?: string;
 }
 
-// Same 1900-char snapshot bound as calibration events / lib/calibration.ts.
-const MAX_FIELD = 1900;
+// Preserve long-form correction snapshots across rich-text chunks.
+const MAX_FIELD = 60000;
 function truncate(text: string | undefined): string {
   return (text ?? "").slice(0, MAX_FIELD);
 }
@@ -101,6 +104,9 @@ function pageToProposal(page: Json): PositionUpdateProposal {
     // Missing Target Type = "position" (back-compat with pre-Identity-Calibration rows).
     targetType: (readSelectProp(page, "Target Type") as ProposalTargetType) ?? "position",
     targetRef: readRichTextProp(page, "Target Ref"),
+    appliedUrl: page.properties?.["Applied URL"]?.url ?? "",
+    appliedAt: page.properties?.["Applied At"]?.date?.start ?? "",
+    appliedRevision: readRichTextProp(page, "Applied Revision"),
   };
 }
 
@@ -121,6 +127,9 @@ interface ProposalDraft {
   confidence: ProposalConfidence;
   targetType: ProposalTargetType;
   targetRef: string;
+  appliedUrl?: string;
+  appliedAt?: string;
+  appliedRevision?: string;
 }
 
 /**

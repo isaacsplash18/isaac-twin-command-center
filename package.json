@@ -14,7 +14,9 @@
     "verify:agent-api": "tsx scripts/verify-agent-api.ts",
     "verify:typefully": "tsx scripts/verify-typefully.ts",
     "test:ui": "playwright test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "migrate:training": "tsx scripts/migrate-training.ts",
+    "test:training": "tsx scripts/test-training.ts && tsx scripts/test-training-api.ts"
   },
   "dependencies": {
     "@paper-design/shaders-react": "0.0.77",

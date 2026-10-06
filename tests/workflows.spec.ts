@@ -90,6 +90,8 @@ async function setup(
     else if (url.pathname === "/api/calibration")
       body = { questions: [], pageUrl: "", roundIntro: "" };
     else if (url.pathname === "/api/proposals") body = { proposals: [] };
+    else if (url.pathname === "/api/training") body = { examples: [], runs: [], metrics: { reviewed: 0, untouchedApprovalRate: null, editedApprovalRate: null, rejectionRate: null, averageEditPercent: null }, warnings: [] };
+    else if (url.pathname === "/api/training/evaluations") body = { cases: [], evaluations: [], warnings: [] };
     else if (url.pathname === "/api/kpis")
       body = {
         overall: {
@@ -352,19 +354,15 @@ test("hologram is visible by default and can be paused", async ({ page }) => {
   await expect
     .poll(() => video.evaluate((v: HTMLVideoElement) => v.readyState))
     .toBeGreaterThan(1);
-  const beforePause = await video.evaluate(
-    (v: HTMLVideoElement) => v.currentTime,
-  );
   await page.getByRole("button", { name: "Pause motion" }).click();
-  expect(
-    Math.abs(
-      (await video.evaluate((v: HTMLVideoElement) => v.currentTime)) -
-        beforePause,
-    ),
-  ).toBeLessThan(1);
-  await expect
-    .poll(() => video.evaluate((v: HTMLVideoElement) => v.paused))
-    .toBe(true);
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+  const pausedTimes = await video.evaluate(async (v: HTMLVideoElement) => {
+    const before = v.currentTime;
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+    return [before, v.currentTime];
+  });
+  expect(pausedTimes[1]).toBe(pausedTimes[0]);
   await expect(
     page.getByRole("button", { name: "Resume motion" }),
   ).toHaveAttribute("aria-pressed", "true");
