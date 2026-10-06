@@ -1,5 +1,7 @@
 "use client";
 
+import { PlatformLogo } from "./PlatformLogo";
+
 import { useState } from "react";
 import { FrameCard } from "./FrameCard";
 import { postAction } from "./useApi";
@@ -61,7 +63,8 @@ export function QueuePanel({
       className="flex flex-col gap-3 border-t border-hairline-faint py-4 sm:flex-row sm:items-center sm:justify-between"
     >
       <div className="min-w-0">
-        <p className="text-xs font-semibold text-oxblood">
+        <p className="flex items-center gap-2 text-sm font-semibold text-ink">
+          <PlatformLogo platform={item.platform} />
           {item.platformLabel}
         </p>
         <a

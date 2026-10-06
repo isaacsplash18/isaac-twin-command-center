@@ -1,5 +1,7 @@
 "use client";
 
+import { PlatformLogo } from "./PlatformLogo";
+
 import { AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { FrameCard } from "./FrameCard";
@@ -56,6 +58,7 @@ export function ApprovalQueue({
               aria-pressed={tab === t.key}
               className={`btn ${tab === t.key ? "bg-ink text-white" : "btn-secondary"}`}
             >
+              <PlatformLogo platform={t.key} />
               {t.label}
               <span
                 className={tab === t.key ? "text-white/75" : "text-ink-dim"}
@@ -260,7 +263,8 @@ function DraftCard({
       <FrameCard sweep className="p-5 sm:p-7">
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
           <div className="flex items-center gap-2">
-            <span className="rounded-md bg-ground px-2.5 py-1 font-semibold">
+            <span className="inline-flex items-center gap-2 rounded-md bg-ground px-2.5 py-1 font-semibold">
+              <PlatformLogo platform={item.platform} />
               {item.platformLabel}
             </span>
             {edited && <span className="text-amber">Edited</span>}

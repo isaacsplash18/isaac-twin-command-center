@@ -1,5 +1,7 @@
 "use client";
 
+import { PlatformLogo } from "./PlatformLogo";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApprovalQueue } from "./ApprovalQueue";
 import { CommandPalette, PaletteAction } from "./CommandPalette";
@@ -360,8 +362,11 @@ export function CommandCenter() {
                         <p className="text-sm font-semibold">
                           {q.title || q.platformLabel}
                         </p>
-                        <p className="mt-1 text-xs text-ink-dim">
-                          {q.platformLabel} · {formatSgt(q.scheduledAt)} SGT
+                        <p className="mt-1 flex items-center gap-2 text-xs text-ink-dim">
+                          <PlatformLogo platform={q.platform} />
+                          <span>
+                            {q.platformLabel} · {formatSgt(q.scheduledAt)} SGT
+                          </span>
                         </p>
                       </div>
                     ))}

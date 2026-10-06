@@ -1,5 +1,7 @@
 "use client";
 
+import { PlatformLogo } from "./PlatformLogo";
+
 import { useState } from "react";
 import { FrameCard } from "./FrameCard";
 import { useApi } from "./useApi";
@@ -136,7 +138,10 @@ export function KpiPanel({ index }: { index: number }) {
               ] as const
             ).map(([k, label]) => (
               <div key={k}>
-                <div className="text-[13px] text-ink-dim">{label}</div>
+                <div className="flex items-center gap-2 text-[13px] text-ink-dim">
+                  <PlatformLogo platform={k} />
+                  {label}
+                </div>
                 <div className="font-mono text-sm text-ink">
                   {pct(data.perPlatform[k]?.untouchedApprovalRate)}
                 </div>
