@@ -3,7 +3,7 @@
  *
  * Auth is Bearer AGENT_API_TOKEN (lib/machine-auth.ts isAgentAuthorized), fails
  * closed when unset, and is separate from the Hermes lane. Every success body
- * carries `version: 1` (the hermes export convention — a breaking change bumps
+ * carries `version: 1` (a breaking change bumps
  * it); every failure is `{ error }` at the right status, like handleAction.
  *
  * Business logic stays in lib/actions, lib/items, lib/publisher, lib/proposals,
@@ -92,7 +92,7 @@ async function statusOf(pageId: string): Promise<string | null> {
  * wrapped lib action means "the item already moved on"; when `isReplay(status)`
  * (judged on a fresh re-read) that is a SUCCESS no-op — `200 { noop: true }` —
  * so re-POSTing the same request is safe. Otherwise the 409 passes through.
- * Default `isReplay` accepts any status: the /api/hermes/decisions convention,
+ * Default `isReplay` accepts any status:
  * where the caller reads `status` to see what the item actually became.
  */
 export async function itemAction(

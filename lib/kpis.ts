@@ -120,7 +120,7 @@ export async function computeKpis(windowDays: 7 | 28): Promise<Kpis> {
   };
 }
 
-/** Publish-failed events in the last 24h from Pipeline Events (shared by the hermes export and /api/agent/state). */
+/** Publish-failed events in the last 24h from Pipeline Events (used by /api/agent/state). */
 export async function publishFailures24h(): Promise<number> {
   const events = await queryEvents(new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
   return events.filter((e) => readSelectProp(e, "Event") === "Publish-failed").length;

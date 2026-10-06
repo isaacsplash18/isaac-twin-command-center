@@ -106,7 +106,7 @@ export function CommandCenter() {
     ],
     train: [
       "A little more you.",
-      "Share your perspective and review suggestions to help your twin learn.",
+      "Save feedback to your Personal Constitution in Notion for your Claude routines.",
     ],
     more: [
       "The bigger picture.",
@@ -461,8 +461,8 @@ export function CommandCenter() {
             <FrameCard className="p-5 sm:p-7">
               <h2 className="panel-heading">Check in with Nova</h2>
               <p className="mt-2 text-sm text-ink-dim">
-                One question at a time. Your answers help refine your twin’s
-                understanding.
+                Your answers are saved to the Weekly Positions Survey in Notion.
+                The Sunday review is intended to incorporate them into your positions.
               </p>
               <NovaStage
                 mood={nova.mood}

@@ -50,7 +50,7 @@ const TARGET_OPTIONS: TargetType[] = [
 ];
 
 const ACCEPT_TOAST =
-  "Accepted. This suggestion is saved, but it has not changed the canonical files. Isaac must apply it separately.";
+  "Accepted and saved in Notion. Your guidelines are unchanged until this suggestion is applied during review.";
 
 /** PATCH an amendment (edit proposed text / reclassify). */
 async function patchAmendment(
@@ -163,7 +163,7 @@ export function IdentityCalibrationPanel({
       <h2 className="panel-heading">Suggested improvements</h2>
       <p className="mt-1 break-words text-[13px] leading-snug text-ink-dim/80">
         Accepting a suggestion saves it for review. It does not change your
-        canonical files; those changes must be applied separately.
+        Personal Constitution in Notion; those changes must be applied separately.
       </p>
 
       {loading && !data && (

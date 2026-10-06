@@ -1,3 +1,5 @@
+> **RETIRED — 7 October 2026.** Historical design only. Hermes is not running and is not part of the current workflow. Its app routes, worker scripts and exporter have been removed. Current architecture: Claude routines ↔ Notion Personal Constitution ↔ Command Center. See [current architecture](current-architecture.md). Statements below about running workers or Mac mini deployment are not current operational facts.
+
 # Hermes Calibration Plan — Isaac Twin Command Center
 
 *Phases 0–2 of the build brief (`claude-code-twin-build-instructions.md`). This file is the

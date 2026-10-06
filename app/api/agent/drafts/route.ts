@@ -2,8 +2,7 @@
  * /api/agent/drafts — Agent API (docs/AGENT-API.md). Bearer AGENT_API_TOKEN.
  *
  * GET  — pending-review drafts (Status=Draft) with full bodies, newest first.
- * POST — create a draft: same contract, validation and warnings as
- *        POST /api/hermes/drafts (shared lib/items.ts createDraft). Always lands
+ * POST — create a draft using shared lib/items.ts validation. Always lands
  *        as Status=Draft, NEVER publishes. Provenance `createdBy` is forced to
  *        "agent" on this lane regardless of the body.
  */

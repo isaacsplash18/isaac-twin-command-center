@@ -1,3 +1,5 @@
+> **RETIRED — 7 October 2026.** Historical design only. Hermes is not running and is not part of the current workflow. Its app routes, worker scripts and exporter have been removed. Current architecture: Claude routines ↔ Notion Personal Constitution ↔ Command Center. See [current architecture](current-architecture.md). Statements below about running workers or Mac mini deployment are not current operational facts.
+
 # Telegram Approval Bridge — Design (Phase 8)
 
 > **⏸ PAUSED — 8 July 2026, by Isaac's direction.** Draft approvals, edits and
