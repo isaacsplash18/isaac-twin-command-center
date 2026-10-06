@@ -163,12 +163,13 @@ export function CommandCenter() {
             onClick={() => navigate("review")}
             className="flex items-center gap-3"
           >
-            <span
-              aria-hidden="true"
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-oxblood font-serif text-2xl text-white"
-            >
-              i.
-            </span>
+            <img
+              src="/icons/diamond-192.png"
+              alt=""
+              width={40}
+              height={40}
+              className="h-10 w-10 shrink-0 rounded-xl"
+            />
             <span className="text-base font-semibold tracking-tight">
               Isaac Twin
               <span className="mt-0.5 hidden sm:block text-xs font-normal text-ink-dim">
