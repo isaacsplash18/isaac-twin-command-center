@@ -139,7 +139,7 @@ test("desktop review leads, navigation works, and search finds body text", async
   await expect(
     page.getByRole("heading", { name: "Needs your review" }),
   ).toBeVisible();
-  await expect(page.locator("video")).toHaveCount(0);
+  await expect(page.locator("video")).toBeVisible();
   const bounds = await page.getByRole("article").first().boundingBox();
   expect(bounds!.y).toBeLessThan(600);
   await page.getByRole("button", { name: /Search & commands/ }).click();
@@ -158,6 +158,11 @@ test("desktop review leads, navigation works, and search finds body text", async
       .getByRole("navigation", { name: "Main navigation", exact: true })
       .getByRole("button", { name, exact: name !== "Review" })
       .click();
+  await expect
+    .poll(() =>
+      page.locator("video").evaluate((v: HTMLVideoElement) => v.readyState),
+    )
+    .toBeGreaterThan(1);
   await page.screenshot({
     path: "test-results/review-desktop.png",
     fullPage: true,
@@ -338,4 +343,40 @@ test("saving changes keeps the updated draft in review", async ({ page }) => {
     draft.getByText("A saved thought.", { exact: true }),
   ).toBeVisible();
   expect(mutations.map((m) => m.path)).toEqual(["/api/items/one/edit"]);
+});
+
+test("hologram is visible by default and can be paused", async ({ page }) => {
+  await setup(page);
+  const video = page.locator("video");
+  await expect(video).toBeVisible();
+  await expect
+    .poll(() => video.evaluate((v: HTMLVideoElement) => v.readyState))
+    .toBeGreaterThan(1);
+  const beforePause = await video.evaluate(
+    (v: HTMLVideoElement) => v.currentTime,
+  );
+  await page.getByRole("button", { name: "Pause motion" }).click();
+  expect(
+    Math.abs(
+      (await video.evaluate((v: HTMLVideoElement) => v.currentTime)) -
+        beforePause,
+    ),
+  ).toBeLessThan(1);
+  await expect
+    .poll(() => video.evaluate((v: HTMLVideoElement) => v.paused))
+    .toBe(true);
+  await expect(
+    page.getByRole("button", { name: "Resume motion" }),
+  ).toHaveAttribute("aria-pressed", "true");
+});
+
+test("hologram respects reduced motion", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await setup(page);
+  await expect(page.locator("video")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.locator("video").evaluate((v: HTMLVideoElement) => v.paused),
+    )
+    .toBe(true);
 });

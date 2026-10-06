@@ -6,6 +6,7 @@ import { CommandPalette, PaletteAction } from "./CommandPalette";
 import { FrameCard } from "./FrameCard";
 import { KpiPanel } from "./KpiPanel";
 import { NovaStage } from "./NovaStage";
+import { NovaCompanion } from "./NovaCompanion";
 import { novaState } from "./novaVoice";
 import { QueuePanel } from "./QueuePanel";
 import { IdentityCalibrationPanel } from "./IdentityCalibrationPanel";
@@ -27,7 +28,6 @@ export function CommandCenter() {
   const [view, setView] = useState<View>("review");
   const [tab, setTab] = useState<PlatformKey | "all">("all");
   const [toasts, setToasts] = useState<{ id: number; message: string }[]>([]);
-  const [novaExpanded, setNovaExpanded] = useState(false);
   const [reviewReset, setReviewReset] = useState(0);
   const [targetDraft, setTargetDraft] = useState<string | null>(null);
   const toast = useCallback((message: string) => {
@@ -154,7 +154,7 @@ export function CommandCenter() {
       >
         Skip to content
       </a>
-      <header className="glass relative z-20 border-b border-hairline-faint">
+      <header className="glass command-header relative z-20 border-b border-hairline-faint">
         <div className="mx-auto flex max-w-[1320px] flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-8">
           <a
             href="#review"
@@ -202,7 +202,7 @@ export function CommandCenter() {
             <p className="mb-2 text-sm font-semibold text-oxblood">
               {VIEWS.find((v) => v.id === view)?.label}
             </p>
-            <h1 className="font-serif text-3xl leading-tight sm:text-5xl">
+            <h1 className="font-sans text-3xl font-semibold tracking-tight leading-tight sm:text-5xl">
               {headings[view][0]}
             </h1>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-ink-dim sm:text-base">
@@ -275,8 +275,8 @@ export function CommandCenter() {
           </div>
         )}
         {view === "review" && (
-          <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
-            <div className="min-w-0">
+          <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="order-2 min-w-0 lg:order-1">
               <div className="mb-5 flex items-center justify-between">
                 <h2 className="text-lg font-semibold">Needs your review</h2>
                 {data && (
@@ -331,42 +331,17 @@ export function CommandCenter() {
                 />
               ) : null}
             </div>
-            <aside className="space-y-5">
-              <FrameCard className="p-5">
-                <div className="flex items-center gap-3">
-                  <img
-                    src="/nova.png"
-                    alt=""
-                    className="h-12 w-12 rounded-full bg-ground object-cover object-top"
-                  />
-                  <div>
-                    <h2 className="font-semibold">A note from Nova</h2>
-                    <p className="text-xs text-ink-dim">
-                      Your content companion
-                    </p>
-                  </div>
-                </div>
-                <p className="mt-4 font-serif text-lg leading-relaxed">
-                  {data
+            <aside className="order-1 space-y-5 lg:order-2 lg:sticky lg:top-6">
+              <NovaCompanion
+                mood={nova.mood}
+                line={
+                  data
                     ? nova.lines[0]
-                    : "I’ll have your overview ready when the connection is back."}
-                </p>
-                <button
-                  aria-expanded={novaExpanded}
-                  className="btn btn-quiet mt-3 w-full"
-                  onClick={() => setNovaExpanded((v) => !v)}
-                >
-                  {novaExpanded ? "Hide Nova" : "Spend a moment with Nova"}
-                </button>
-                {novaExpanded && (
-                  <NovaStage
-                    mood={nova.mood}
-                    idleLine={nova.lines[0]}
-                    onToast={toast}
-                  />
-                )}
-              </FrameCard>
-              <FrameCard className="p-5">
+                    : "I’ll have your overview ready when the connection is back."
+                }
+                onTrain={() => navigate("train")}
+              />
+              <FrameCard className="hidden p-5 lg:block">
                 <h2 className="font-semibold">Coming up</h2>
                 {data ? (
                   <>

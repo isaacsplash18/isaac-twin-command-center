@@ -32,25 +32,44 @@ export default function LoginPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center p-6">
-      <form onSubmit={submit} className="w-full max-w-xs border border-hairline bg-panel p-6">
-        <h1 className="font-mono text-xs tracking-[0.15em] text-ink-dim">ISAAC TWIN</h1>
-        <p className="mt-1 font-sans text-lg font-semibold text-ink">Command Center</p>
+      <form
+        onSubmit={submit}
+        className="instrument-card w-full max-w-sm rounded-2xl border border-hairline bg-white p-8"
+      >
+        <h1 className="font-mono text-xs tracking-[0.15em] text-oxblood">
+          ISAAC TWIN
+        </h1>
+        <p className="mt-3 font-sans text-2xl font-semibold tracking-tight text-ink">
+          Command Center
+        </p>
+        <p className="mt-2 text-sm text-ink-dim">Your voice. Your control.</p>
+        <label
+          htmlFor="passphrase"
+          className="mt-6 block text-sm font-semibold"
+        >
+          Passphrase
+        </label>
         <input
+          id="passphrase"
           type="password"
           value={passphrase}
           onChange={(e) => setPassphrase(e.target.value)}
           placeholder="Passphrase"
           autoFocus
           autoComplete="current-password"
-          className="mt-6 w-full border border-hairline bg-ground px-3 py-2.5 font-mono text-sm text-ink placeholder:text-ink-dim/50 focus:border-ink/40 focus:outline-none"
+          className="mt-2 w-full rounded-lg border border-hairline bg-ground px-3 py-3 text-base text-ink"
         />
-        {error && <p className="mt-2 font-mono text-xs text-oxbright">{error}</p>}
+        {error && (
+          <p role="alert" className="mt-2 text-sm text-oxbright">
+            {error}
+          </p>
+        )}
         <button
           type="submit"
           disabled={busy || !passphrase}
-          className="mt-4 w-full border border-oxbright/60 bg-oxblood/30 px-4 py-2.5 font-mono text-xs tracking-[0.12em] text-ink hover:bg-oxblood/50 disabled:opacity-50"
+          className="btn btn-primary mt-5 w-full"
         >
-          {busy ? "VERIFYING…" : "UNLOCK"}
+          {busy ? "Verifying…" : "Enter command center"}
         </button>
       </form>
     </main>

@@ -30,14 +30,26 @@ const TAIL_SECONDS = 2;
 
 export type NovaMood = "praise" | "sass" | "neutral";
 
-export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
-  const [reduced, setReduced] = useState(false);
+export function Nova({
+  mood,
+  line,
+  paused = false,
+}: {
+  mood: NovaMood;
+  line: string;
+  paused?: boolean;
+}) {
+  const [systemReduced, setSystemReduced] = useState(true);
+  const reduced = systemReduced || paused;
   const figureRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduced(mql.matches);
+    const update = () => setSystemReduced(mql.matches);
+    update();
+    mql.addEventListener("change", update);
+    return () => mql.removeEventListener("change", update);
   }, []);
 
   // Reduced motion: hold on a single frame instead of autoplaying — never
@@ -49,12 +61,17 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
     const v = videoRef.current;
     if (!v || !reduced) return;
     v.pause();
+    if (paused) return; // A manual pause holds the current pose.
     const onMeta = () => {
-      v.currentTime = Number.isFinite(v.duration) && v.duration > 0 ? Math.max(0, v.duration - 0.05) : 0.1;
+      v.currentTime =
+        Number.isFinite(v.duration) && v.duration > 0
+          ? Math.max(0, v.duration - 0.05)
+          : 0.1;
     };
+    if (v.readyState >= 1) onMeta();
     v.addEventListener("loadedmetadata", onMeta);
     return () => v.removeEventListener("loadedmetadata", onMeta);
-  }, [reduced]);
+  }, [reduced, paused]);
 
   // Intro-then-tail playback: play the full clip once on load, then loop
   // only its final TAIL_SECONDS forever. `loop` is intentionally not set on
@@ -81,7 +98,10 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
       else v.currentTime = t;
     };
 
-    const tailStart = () => (Number.isFinite(v.duration) && v.duration > 0 ? Math.max(0, v.duration - TAIL_SECONDS) : null);
+    const tailStart = () =>
+      Number.isFinite(v.duration) && v.duration > 0
+        ? Math.max(0, v.duration - TAIL_SECONDS)
+        : null;
 
     // Seek back once we're within EPSILON of the end rather than waiting on
     // another `ended` — `ended` only fires after the last frame has already
@@ -134,7 +154,8 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
     return () => {
       v.removeEventListener("ended", enterTail);
       v.removeEventListener("timeupdate", onTimeUpdate);
-      if (rvfcHandle !== null && supportsRVFC) v.cancelVideoFrameCallback(rvfcHandle);
+      if (rvfcHandle !== null && supportsRVFC)
+        v.cancelVideoFrameCallback(rvfcHandle);
     };
   }, [reduced]);
 
@@ -227,7 +248,11 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
       >
         <div
           className="h-full w-full"
-          style={reduced ? undefined : { animation: "nova-breathe 6s ease-in-out infinite" }}
+          style={
+            reduced
+              ? undefined
+              : { animation: "nova-breathe 6s ease-in-out infinite" }
+          }
         >
           <div
             className="relative h-full w-full overflow-hidden"
@@ -253,12 +278,17 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
               // holds the old framing, so no repositioning is needed inside
               // it.
               className="absolute left-0 top-0 w-full"
-              style={{ height: "125%", objectFit: "cover", objectPosition: "center" }}
+              style={{
+                height: "125%",
+                objectFit: "cover",
+                objectPosition: "center",
+              }}
               src="/nova-hologram.mp4"
               muted
               playsInline
               autoPlay={!reduced}
-              preload="auto"
+              preload="metadata"
+              poster="/nova.png"
               aria-label="Nova — the twin's holographic presence"
             />
             {/* deepen into the ground at the very bottom — matches the page
@@ -268,7 +298,10 @@ export function Nova({ mood, line }: { mood: NovaMood; line: string }) {
                 where the calibration card overlaps. */}
             <div
               className="absolute inset-0"
-              style={{ background: "linear-gradient(to bottom, transparent 55%, var(--color-ground) 96%)" }}
+              style={{
+                background:
+                  "linear-gradient(to bottom, transparent 55%, var(--color-ground) 96%)",
+              }}
             />
             {/* faint oxblood rim light, restrained so it reads as a glow
                 accent over the hologram's own cyan/teal shading */}

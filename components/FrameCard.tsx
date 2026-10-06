@@ -24,7 +24,7 @@ export function FrameCard({
         x: reduced || !sweep ? 0 : 8,
         transition: { duration: 0.12 },
       }}
-      className={`rounded-2xl border border-hairline-faint bg-white shadow-[0_2px_12px_rgba(25,26,28,0.025)] ${className}`}
+      className={`instrument-card rounded-xl border border-hairline-faint bg-white shadow-[0_2px_12px_rgba(25,26,28,0.025)] ${className}`}
     >
       {children}
     </motion.div>
