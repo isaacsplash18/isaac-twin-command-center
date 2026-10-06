@@ -19,3 +19,6 @@ hf_*.mp4
 dist/
 build/
 _to_delete/
+
+# exporter dry-run output (personal context; never commit)
+hermes/export-preview/
