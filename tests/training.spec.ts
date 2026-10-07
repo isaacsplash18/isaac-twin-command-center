@@ -32,6 +32,7 @@ test("training report presents empty state, feedback examples, and saves scope a
   });
 
   await page.goto("/#train");
+  await page.getByText("Progress and past feedback", { exact: true }).click();
   await expect(page.getByRole("heading", { name: "Training progress" })).toBeVisible();
   await expect(page.getByText("Reported review metrics")).toBeVisible();
   await expect(page.getByText("No routine usage reported yet.")).toHaveCount(0);
@@ -60,6 +61,7 @@ test("training report says no routine usage when its report is empty", async ({ 
     return route.fulfill({ json: {} });
   });
   await page.goto("/#train");
+  await page.getByText("Progress and past feedback", { exact: true }).click();
   await expect(page.getByText("No routine usage reported yet.")).toBeVisible();
   await expect(page.getByText("underlying model was retrained", { exact: false })).toBeVisible();
 });
@@ -84,6 +86,8 @@ test("application preview keeps a conflicting update unapplied", async ({ page }
     return route.fulfill({ json: {} });
   });
   await page.goto("/#train");
+  await page.getByText("Progress and past feedback", { exact: true }).click();
+  await page.getByText("Update your Notion guidance", { exact: true }).click();
   await page.getByRole("button", { name: "Preview Notion update" }).click();
   await expect(page.getByText("Use direct language.", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Apply this amendment" }).click();
@@ -108,9 +112,12 @@ test('comparison queue preserves answers and saves explicit preferences before a
   return route.fulfill({json:{proposals:[]}});
  });
  await page.goto('/#train');
+ await expect(page.getByRole('button',{name:'Prefer B',exact:true})).toBeHidden();
+ await page.getByText('Compare writing',{exact:true}).click();
  await page.getByRole('button',{name:'Prefer B',exact:true}).click();
  await page.getByLabel('What made the difference?',{exact:false}).fill('The ending sounds natural.');
  await page.reload();
+ await page.getByText("Compare writing",{exact:true}).click();
  await expect(page.getByRole('button',{name:'Prefer B',exact:true})).toHaveAttribute('aria-pressed','true');
  await expect(page.getByLabel('What made the difference?',{exact:false})).toHaveValue('The ending sounds natural.');
  await page.getByLabel('Remember a preference',{exact:true}).check();

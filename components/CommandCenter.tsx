@@ -1,5 +1,7 @@
 "use client";
 
+import { TrainingSection } from "./TrainingSection";
+
 import { PlatformLogo } from "./PlatformLogo";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -461,23 +463,26 @@ export function CommandCenter() {
           </div>
         )}
         {view === "train" && (
-          <div className="grid items-start gap-6 lg:grid-cols-2">
-            <FrameCard className="p-5 sm:p-7">
-              <h2 className="panel-heading">Check in with Nova</h2>
-              <p className="mt-2 text-sm text-ink-dim">
-                Your answers are saved to the Weekly Positions Survey in Notion.
-                The Sunday review is intended to incorporate them into your positions.
-              </p>
-              <NovaStage
-                mood={nova.mood}
-                idleLine="You’re ready for your next check-in."
-                onToast={toast}
-              />
-            </FrameCard>
-            <IdentityCalibrationPanel index={0} onError={toast} />
-            <ApplySuggestionsPanel />
-            <TrainingProgressPanel index={2} />
-            <TrainingEvaluationPanel index={3} />
+          <div className="mx-auto w-full max-w-5xl space-y-3">
+            <p className="mb-5 text-sm leading-relaxed text-ink-dim">Start with Compare writing. Open the other sections when you want to update your views, review suggestions, or check progress.</p>
+            <TrainingSection title="Compare writing" description="Choose which draft sounds more like you. Explain why, and optionally save a preference for future drafts.">
+              <TrainingEvaluationPanel index={0} />
+            </TrainingSection>
+            <TrainingSection title="Share your views" description="Answer Nova’s check-in questions. Your answers go to Notion for the weekly review of your positions.">
+              <FrameCard className="p-5 sm:p-7">
+                <h2 className="panel-heading">Check in with Nova</h2>
+                <NovaStage mood={nova.mood} idleLine="You’re ready for your next check-in." onToast={toast} />
+              </FrameCard>
+            </TrainingSection>
+            <TrainingSection title="Review suggested changes" description="Review proposed changes to your twin’s views and writing rules. Accept what fits or reject what doesn’t.">
+              <IdentityCalibrationPanel index={1} onError={toast} />
+            </TrainingSection>
+            <TrainingSection title="Update your Notion guidance" description="Apply suggestions you’ve already accepted. Preview the exact wording before adding it to your Notion source.">
+              <ApplySuggestionsPanel />
+            </TrainingSection>
+            <TrainingSection title="Progress and past feedback" description="See draft approval rates, check what routines used, and decide which past corrections should become lasting preferences.">
+              <TrainingProgressPanel index={2} />
+            </TrainingSection>
           </div>
         )}
         {view === "more" && (
