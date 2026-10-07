@@ -22,6 +22,7 @@ interface TrainingRun {
   createdAt: string;
   draftId: string;
   feedbackIds: string[];
+  preferenceIds?: string[];
   sourcePages?: {id:string;revision:string|null}[];
   feedbackCutoff?: string;
 }
@@ -111,7 +112,7 @@ export function TrainingProgressPanel({ index }: { index: number }) {
             <ul className="mt-2 divide-y divide-hairline-faint rounded-lg border border-hairline-faint bg-ground px-3">
               {data.runs.map((run) => <li key={run.id} className="py-3">
                 <p className="break-words text-sm font-semibold text-ink">{run.routine} <span className="font-normal text-ink-dim">· {run.platform}</span></p>
-                <p className="mt-1 break-words text-xs text-ink-dim">{formatDate(run.createdAt)} · draft {run.draftId || "not reported"} · {run.feedbackIds.length} feedback item{run.feedbackIds.length === 1 ? "" : "s"}</p>
+                <p className="mt-1 break-words text-xs text-ink-dim">{formatDate(run.createdAt)} · draft {run.draftId || "not reported"} · {run.feedbackIds.length} feedback item{run.feedbackIds.length === 1 ? "" : "s"} · {run.preferenceIds?.length ?? 0} comparison preferences</p>
                 {run.sourcePages?.length ? <details className="mt-2 text-xs"><summary className="cursor-pointer">Sources reported by routine</summary><p>Feedback read through: {formatDate(run.feedbackCutoff || run.createdAt)}</p><ul>{run.sourcePages.map(source => <li key={source.id}><a className="underline" href={`https://www.notion.so/${source.id.replace(/-/g, "")}`} target="_blank" rel="noreferrer">Open source ↗</a> · {source.revision ? formatDate(source.revision) : "Revision not reported"}</li>)}</ul></details> : null}
               </li>)}
             </ul>

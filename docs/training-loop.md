@@ -32,3 +32,15 @@ Review metrics deduplicate the latest approve/reject decision per draft in the l
 ## Existing Cowork tasks updated
 
 On 7 October 2026, the saved instructions were updated for Daily x tweet draft, Daily substack note draft, Linkedin post draft cloud, Linkedin alternate day draft, Daily x reply radar, Weekly constitution calibration, and Substack ig weekly sync. Schedules, models and permissions were preserved. Updated executions and real usage receipts are pending subsequent runs. Both LinkedIn draft schedules currently exist and overlap; this change does not disable either.
+
+## In-app comparison queue
+
+Train shows pending pairs with hidden methods and stable A/B ordering. Choose A, B, both good, or neither, optionally explain, and save to advance. Unsubmitted answers persist in this browser. Completed judgments stay in Notion; methods are revealed in history. Earlier manually recorded evaluations remain visible.
+
+The default scope is this comparison only. Remembering requires a separate explicit instruction. Only that instruction enters platform-matched drafting context (up to 20 active comparison preferences); neither draft is retrieved as an example. History lets the user revoke it. This updates context, not model weights, and training comparisons are not independent benchmarks.
+
+Training Records now supports Kind `comparison`; run `npm run migrate:training` to add the select option safely. `POST /api/agent/training/comparisons` accepts caseId, title, baseline, candidate, baselineVersion, candidateVersion, sourceSnapshot, sourceUrl and limitations. It assigns A/B ordering and a duplicate key on the server. Agents cannot submit human judgments through this endpoint. The existing weekly Claude routine's shared Notion protocol describes queue replenishment.
+
+`GET /api/training/evaluations` returns pending and completed comparisons plus legacy evaluations. Session-authenticated `POST /api/training/comparisons/:id` saves choice, reason, scope, explicit preference and digest; stale content is rejected. Identical retries do not create duplicate records. `DELETE` revokes the preference while keeping the judgment. Notion does not provide conditional writes, so simultaneous conflicting submissions across multiple devices are not transactionally serialized.
+
+The agent context endpoint includes `preferences` and `preferenceIds`; report consumed comparison IDs separately from CalibrationEvents `feedbackIds` in run reports. Reports reject IDs absent from the receipt or no longer active. Routines using the Notion connector directly must follow the same shared protocol.

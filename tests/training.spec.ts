@@ -90,3 +90,34 @@ test("application preview keeps a conflicting update unapplied", async ({ page }
   await expect(page.getByRole("status").filter({ hasText: "source or suggestion changed" })).toBeVisible();
   expect(submitted).toEqual({ digest: "preview-digest" });
 });
+
+test('comparison queue preserves answers and saves explicit preferences before advancing', async ({page})=>{
+ await auth(page);
+ let pending=[{id:'pair-1',title:'First comparison',platform:'substack',A:'Draft one',B:'Draft two',digest:'digest',sourceSnapshot:'Original passage'},{id:'pair-2',title:'Second comparison',platform:'substack',A:'Another one',B:'Another two',digest:'digest2',sourceSnapshot:'Another passage'}];
+ const completed:any[]=[];
+ await page.route('**/api/**',async route=>{
+  const path=new URL(route.request().url()).pathname;
+  if(path==='/api/training/evaluations')return route.fulfill({json:{pending,completed,evaluations:[]}});
+  if(path==='/api/training/comparisons/pair-1'){
+   const body=route.request().postDataJSON();expect(body.choice).toBe('B');expect(body.preference).toBe('Keep endings plain.');
+   const result={...pending[0],...body,aIs:'candidate',baselineVersion:'v1',candidateVersion:'v2'};completed.push(result);pending=pending.slice(1);return route.fulfill({json:{ok:true,result}});
+  }
+  if(path==='/api/training')return route.fulfill({json:{examples:[],runs:[],metrics:{reviewed:0},warnings:[]}});
+  if(path==='/api/queue')return route.fulfill({json:{drafts:[],approved:[],manual:[],queued:[],posted:[],rejected:[]}});
+  if(path==='/api/panels')return route.fulfill({json:{positions:{total:0,activeCount:0,confidenceCounts:{},needsValidation:[]},inbox:[],wiki:[],publishFailures:[]}});
+  return route.fulfill({json:{proposals:[]}});
+ });
+ await page.goto('/#train');
+ await page.getByRole('button',{name:'Prefer B',exact:true}).click();
+ await page.getByLabel('What made the difference?',{exact:false}).fill('The ending sounds natural.');
+ await page.reload();
+ await expect(page.getByRole('button',{name:'Prefer B',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(page.getByLabel('What made the difference?',{exact:false})).toHaveValue('The ending sounds natural.');
+ await page.getByLabel('Remember a preference',{exact:true}).check();
+ await expect(page.getByRole('button',{name:'Save and next'})).toBeDisabled();
+ await page.getByLabel('What should future substack drafts do?',{exact:false}).fill('Keep endings plain.');
+ await page.getByRole('button',{name:'Save and next'}).click();
+ await expect(page.getByRole('heading',{name:'Second comparison'})).toBeVisible();
+ await page.getByText('Your evaluation history (1)',{exact:true}).click();
+ await expect(page.getByText('Keep endings plain.',{exact:true})).toBeVisible();
+});

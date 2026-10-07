@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { pageToEvent } from "../lib/calibration-events";
 import { readTrainingPayload, SOURCES, applyProposal, previewApplication, reportRun, saveExample, trainingContext } from "../lib/training";
 
+import { comparisonState, judgeComparison, comparisonPreferences, forgetComparisonPreference } from '../lib/comparisons';
+
 const DS = {
   events: "10000000-0000-4000-8000-000000000001",
   training: "10000000-0000-4000-8000-000000000002",
@@ -210,12 +212,39 @@ async function testOnceFeedbackCannotBeReportedAsConsumed() {
   } finally { restore(); }
 }
 
+async function testComparisons() {
+ let payload:any={caseId:'substack-quarry',platform:'substack',title:'A passage',baseline:'First draft',candidate:'Second draft',baselineVersion:'v1',candidateVersion:'v2',aIs:'candidate',status:'pending',sourceSnapshot:'Source',sourceUrl:'',limitations:'Exercise',comparisonKey:'key'};
+ let patches=0;
+ const restore=withNotionMock((url,init)=>{
+   const page=()=>({...trainingPage(payload),properties:{...trainingPage(payload).properties,Kind:select('comparison')}});
+   if(init.method==='PATCH'){patches++;payload=JSON.parse(JSON.parse(String(init.body)).properties.Payload.rich_text.map((x:any)=>x.text.content).join(''));return response(page());}
+   if(url.pathname.endsWith('/query'))return response({results:[page()],has_more:false});
+   return response(page());
+ });
+ try{
+   const pending=(await comparisonState()).pending[0];
+   assert.equal(pending.A,'Second draft');assert.equal('aIs' in pending,false);assert.equal('baselineVersion' in pending,false);
+   const answer={choice:'B',scope:'always',reason:'Natural ending',preference:'Keep endings plain',digest:pending.digest};
+   await assert.rejects(()=>judgeComparison(IDS.context,{...answer,digest:'stale'}),/changed/);
+   await assert.rejects(()=>judgeComparison(IDS.context,{...answer,preference:''}),/invalid/);
+   assert.equal(patches,0);
+   await judgeComparison(IDS.context,answer);assert.equal(payload.winner,'baseline');assert.equal(patches,1);
+   await judgeComparison(IDS.context,answer);assert.equal(patches,1);
+   await assert.rejects(()=>judgeComparison(IDS.context,{...answer,choice:'A'}),/already answered/);
+   const preferences=await comparisonPreferences('substack');assert.equal(preferences[0].preference,'Keep endings plain');assert.equal('baseline' in preferences[0],false);
+   assert.deepEqual(await comparisonPreferences('x'),[]);
+   await forgetComparisonPreference(IDS.context);assert.deepEqual(await comparisonPreferences('substack'),[]);
+   for(const choice of ['both','neither']){payload.status='pending';await judgeComparison(IDS.context,{...answer,scope:'once',choice});assert.equal(payload.winner,choice);assert.equal(payload.preference,'');}
+ }finally{restore();}
+}
+
 async function main() {
   const restorePayload = withNotionMock(() => response({results:[{type:'code',code:{language:'json',rich_text:rich('{"routine":"cowork","feedbackIds":[]}').rich_text}}],has_more:false}));
   try {
     assert.deepEqual(await readTrainingPayload({id:IDS.context,properties:{Payload:rich('JSON payload in page body')}}),{routine:'cowork',feedbackIds:[]});
     assert.deepEqual(await readTrainingPayload({id:IDS.context,properties:{Payload:rich('training-json: {"routine":"prefix"}')}}),{routine:'prefix'});
   } finally {restorePayload();}
+  await testComparisons();
   await testSnapshotParsingOver1900Chars();
   await testWrongDatabaseIdsAreRejected();
   await testStalePreviewDoesNotAppend();

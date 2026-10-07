@@ -17,8 +17,11 @@ async function main(){
  const existing=blocks.find(b=>b.type==='child_database'&&b.child_database.title==='Training Records');
  let db;
  if(existing)db=await notionFetch(`/databases/${existing.id}`);
- else db=await notionFetch('/databases',{method:'POST',body:JSON.stringify({parent:{type:'page_id',page_id:hub},title:[{type:'text',text:{content:'Training Records'}}],initial_data_source:{properties:{Name:{title:{}},Kind:{select:{options:['context','run','evaluation'].map(name=>({name}))}},Payload:{rich_text:{}}}}})});
+ else db=await notionFetch('/databases',{method:'POST',body:JSON.stringify({parent:{type:'page_id',page_id:hub},title:[{type:'text',text:{content:'Training Records'}}],initial_data_source:{properties:{Name:{title:{}},Kind:{select:{options:['context','run','evaluation','comparison'].map(name=>({name}))}},Payload:{rich_text:{}}}}})});
  const ds=db.data_sources?.[0]?.id;if(!ds)throw new Error('No training data source');
+ const schema=await notionFetch(`/data_sources/${ds}`);
+ const options=schema.properties.Kind.select.options;
+ if(!options.some((o:any)=>o.name==='comparison'))await notionFetch(`/data_sources/${ds}`,{method:'PATCH',body:JSON.stringify({properties:{Kind:{select:{options:[...options,{name:'comparison'}]}}}})});
  console.log(`DS_TRAINING=${ds}`);
 }
 main().catch(e=>{console.error(e.message);process.exit(1)});
