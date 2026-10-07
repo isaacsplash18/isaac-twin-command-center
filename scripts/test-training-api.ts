@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { pageToEvent } from "../lib/calibration-events";
-import { SOURCES, applyProposal, previewApplication, reportRun, saveExample, trainingContext } from "../lib/training";
+import { readTrainingPayload, SOURCES, applyProposal, previewApplication, reportRun, saveExample, trainingContext } from "../lib/training";
 
 const DS = {
   events: "10000000-0000-4000-8000-000000000001",
@@ -211,6 +211,11 @@ async function testOnceFeedbackCannotBeReportedAsConsumed() {
 }
 
 async function main() {
+  const restorePayload = withNotionMock(() => response({results:[{type:'code',code:{language:'json',rich_text:rich('{"routine":"cowork","feedbackIds":[]}').rich_text}}],has_more:false}));
+  try {
+    assert.deepEqual(await readTrainingPayload({id:IDS.context,properties:{Payload:rich('JSON payload in page body')}}),{routine:'cowork',feedbackIds:[]});
+    assert.deepEqual(await readTrainingPayload({id:IDS.context,properties:{Payload:rich('training-json: {"routine":"prefix"}')}}),{routine:'prefix'});
+  } finally {restorePayload();}
   await testSnapshotParsingOver1900Chars();
   await testWrongDatabaseIdsAreRejected();
   await testStalePreviewDoesNotAppend();

@@ -13,15 +13,30 @@ function checkId(id:string){if(!idPattern.test(id))throw new ActionError('Invali
 function belongs(page:any,ds:string){if(norm(page.parent?.data_source_id||'')!==norm(ds))throw new ActionError('Page is outside the configured database',400);}
 const text=(v:unknown,max=60000)=>{if(typeof v!=='string'||v.length>max)throw new ActionError(`Expected text up to ${max} characters`,400);return v;};
 export const SOURCES={voice:'36b1fec9ef838161a982f1186919cbe8',constitution:'36a1fec9ef8381b6b9a6fe6a614e9795',x:'3ac1fec9ef83817fb286ff6d4ec429f8',linkedin:'3ac1fec9ef8381a6890cc4645a4d2a10',substack:'3ac1fec9ef8381aa9f52e93c51b16333'};
+/** Cowork's Notion connector can reject JSON-object strings in text properties.
+ * Accept strict JSON in the property or a single JSON code block in the body.
+ * Never evaluate Python-style literals or guess malformed receipts.
+ */
+export async function readTrainingPayload(page:any){
+ const raw=readRichTextProp(page,'Payload').replace(/^training-json:\s*/,'');
+ try{return JSON.parse(raw);}catch{}
+ const blocks=await listBlocks(page.id);
+ const candidates=blocks.filter(b=>b.type==='code'&&b.code?.language==='json');
+ if(candidates.length!==1)throw new Error('Expected one JSON payload block');
+ return JSON.parse(plainText(candidates[0].code.rich_text));
+}
+function isTestEvent(e:{topic:string;rawUserText:string}){return /^ZZTEST\b/i.test(e.topic)||/^ZZTEST\b/i.test(e.rawUserText);}
 export async function records(kind:string){
  if(!process.env.DS_TRAINING)return [];
  const pages=await queryDataSource(process.env.DS_TRAINING,{filter:{property:'Kind',select:{equals:kind}},sorts:[{timestamp:'created_time',direction:'descending'}]},3);
- return pages.map(p=>{try{const value=JSON.parse(readRichTextProp(p,'Payload'));
-  if(!value||typeof value!=='object'||Array.isArray(value))return null;
-  if(kind==='run'&&(!idPattern.test(value.draftId||'')||!idPattern.test(value.contextId||'')||typeof value.routine!=='string'||!['x','linkedin','substack'].includes(value.platform)||!Array.isArray(value.feedbackIds)||value.feedbackIds.some((id:unknown)=>typeof id!=='string'||!idPattern.test(id))))return null;
-  if(kind==='evaluation'&&(!EVALUATION_CASES.some(c=>c.id===value.caseId)||!['baseline','candidate','tie'].includes(value.winner)||!Array.isArray(value.violations)||value.violations.some((v:unknown)=>typeof v!=='string')||['baseline','candidate','baselineVersion','candidateVersion','notes'].some(k=>typeof value[k]!=='string')))return null;
+ const parsed=[];
+ for(const p of pages){try{const value=await readTrainingPayload(p);
+  if(!value||typeof value!=='object'||Array.isArray(value))continue;
+  if(kind==='run'&&(!idPattern.test(value.draftId||'')||!idPattern.test(value.contextId||'')||typeof value.routine!=='string'||!['x','linkedin','substack'].includes(value.platform)||!Array.isArray(value.feedbackIds)||value.feedbackIds.some((id:unknown)=>typeof id!=='string'||!idPattern.test(id))))continue;
+  if(kind==='evaluation'&&(!EVALUATION_CASES.some(c=>c.id===value.caseId)||!['baseline','candidate','tie'].includes(value.winner)||!Array.isArray(value.violations)||value.violations.some((v:unknown)=>typeof v!=='string')||['baseline','candidate','baselineVersion','candidateVersion','notes'].some(k=>typeof value[k]!=='string')))continue;
   if(value.sourcePages)value.sourcePages=Array.isArray(value.sourcePages)?value.sourcePages.filter((s:any)=>s&&idPattern.test(s.id||'')&&(typeof s.revision==='string'||s.revision===null)):[];
-  return {...value,id:p.id,createdAt:p.created_time};}catch{return null;}}).filter(Boolean);
+  parsed.push({...value,id:p.id,createdAt:p.created_time});}catch{continue;}}
+ return parsed;
 }
 export async function record(kind:string,payload:Record<string,unknown>){
  const encoded=JSON.stringify(payload);if(encoded.length>100000)throw new ActionError('Record too large',400);
@@ -48,7 +63,11 @@ export async function trainingState(){
  if(!process.env.DS_CALIBRATION_EVENTS)warnings.push('Feedback database is not configured.');
  if(!process.env.DS_TRAINING)warnings.push('Routine reporting is not configured.');
  const [events,runs]=await Promise.all([queryCalibrationEvents({limit:100}),records('run')]);
- const draftEvents=events.filter(e=>e.objectType==='draft');
+ const draftEvents=events.filter(e=>e.objectType==='draft'&&!isTestEvent(e));
+ const testCount=events.filter(isTestEvent).length;
+ const purgeCount=draftEvents.filter(e=>/^Backlog purge by Isaac:/i.test(e.rawUserText)).length;
+ if(testCount)warnings.push(`${testCount} test events excluded from examples and metrics.`);
+ if(purgeCount)warnings.push(`${purgeCount} backlog-purge rejections are included; this historical sample is not a clean prospective quality benchmark.`);
  return {examples:draftEvents.filter(e=>['edit','reject'].includes(e.action)).map(e=>({...e,reason:e.feedbackReason|| (e.action==='reject'?e.rawUserText:''),scope:e.feedbackScope,usedInDrafts:new Set(runs.filter(r=>Array.isArray(r.feedbackIds)&&r.feedbackIds.some((id:string)=>norm(id)===norm(e.id))).map(r=>r.draftId)).size})),runs,metrics:trainingMetrics(draftEvents),perPlatform:Object.fromEntries(PLATFORMS.map(p=>[p.key,trainingMetrics(draftEvents.filter(e=>e.platform===p.key))])),warnings:[...warnings,'Metrics cover the latest 100 feedback events; edit effort estimates compare up to 3,000 words. Usage is reported by routines, not proof of model reasoning.']};
 }
 async function pageText(id:string){
@@ -58,7 +77,7 @@ async function pageText(id:string){
 }
 export async function trainingContext(platform:string,topic:string){
  if(!['x','linkedin','substack'].includes(platform))throw new ActionError('Unsupported platform',400);
- const events=await queryCalibrationEvents({limit:100});
+ const events=(await queryCalibrationEvents({limit:100})).filter(e=>!isTestEvent(e));
  const terms=topic.toLowerCase().split(/\W+/).filter(w=>w.length>3);
  const corrections=events.filter(e=>e.objectType==='draft'&&e.platform===platform&&e.feedbackScope==='always'&&['edit','reject'].includes(e.action));
  const score=(e:typeof events[number])=>terms.filter(w=>(e.topic+' '+e.feedbackReason).toLowerCase().includes(w)).length;
@@ -77,7 +96,7 @@ export async function reportRun(body:Record<string,unknown>){
  const draftId=checkId(text(body.draftId,40)),routine=text(body.routine,200).trim();if(!routine)throw new ActionError('Routine name required',400);
  const p=await getPage(draftId);const platform=platformFromPage(p);if(!platform)throw new ActionError('Draft is outside content databases',400);
  const contextId=checkId(text(body.contextId,40));const cp=await getPage(contextId);belongs(cp,requiredEnv('DS_TRAINING'));if(readSelectProp(cp,'Kind')!=='context')throw new ActionError('A context receipt is required',400);
- const context=JSON.parse(readRichTextProp(cp,'Payload'));
+ const context=await readTrainingPayload(cp);
  if(context.platform!==platform.key)throw new ActionError('Context platform does not match draft',400);
  if(!Array.isArray(context.feedbackIds))throw new ActionError('Invalid context receipt',400);
  if(!Array.isArray(body.feedbackIds)||body.feedbackIds.length>20||body.feedbackIds.some(id=>typeof id!=='string'||!context.feedbackIds.includes(id)))throw new ActionError('Report only feedback IDs from this context receipt',400);
