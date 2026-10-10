@@ -33,6 +33,8 @@ function assert(label: string, cond: boolean) {
 
 function makeEvent(overrides: Partial<CalibrationEvent>): CalibrationEvent {
   return {
+    feedbackScope: "unspecified",
+    feedbackReason: "",
     id: `verify-event-${Date.now()}`,
     createdAt: new Date().toISOString(),
     source: "command_center",

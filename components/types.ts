@@ -1,4 +1,9 @@
-export type PlatformKey = "x" | "linkedin" | "substack" | "ig-story" | "ig-carousel";
+export type PlatformKey =
+  | "x"
+  | "linkedin"
+  | "substack"
+  | "ig-story"
+  | "ig-carousel";
 
 export interface ContentItem {
   id: string;
@@ -78,10 +83,10 @@ export interface PanelsData {
 }
 
 export const PLATFORM_TABS: { key: PlatformKey | "all"; label: string }[] = [
-  { key: "all", label: "ALL" },
+  { key: "all", label: "All platforms" },
   { key: "x", label: "X" },
-  { key: "linkedin", label: "LINKEDIN" },
-  { key: "substack", label: "SUBSTACK" },
+  { key: "linkedin", label: "LinkedIn" },
+  { key: "substack", label: "Substack" },
   // IG STORY and IG CAROUSEL hidden 2026-07-29 (engines switched off).
   // The PlatformKey union above deliberately still carries both keys.
 ];

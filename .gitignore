@@ -22,3 +22,7 @@ _to_delete/
 
 # exporter dry-run output (personal context; never commit)
 hermes/export-preview/
+
+# Browser test artifacts
+/test-results/
+/playwright-report/

@@ -1,75 +1,123 @@
 "use client";
 
+import { PlatformLogo } from "./PlatformLogo";
+
 import { AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { FrameCard } from "./FrameCard";
 import { postAction } from "./useApi";
-import { ContentItem, PLATFORM_TABS, PlatformKey, formatSgt, twinPulse } from "./types";
+import {
+  ContentItem,
+  PLATFORM_TABS,
+  PlatformKey,
+  formatSgt,
+  twinPulse,
+} from "./types";
 
-/**
- * Per-platform char limits: X is a hard 280 (over → oxbright); LinkedIn a soft
- * 3000 and Substack Notes a soft 600 (over → amber). The Substack platform
- * ceiling is 10,000, but a Note that runs past ~600 has stopped being an
- * observation, so the amber is a voice guardrail, not a platform one.
- */
-const CHAR_LIMITS: Partial<Record<PlatformKey, { limit: number; hard: boolean }>> = {
-  x: { limit: 280, hard: true },
-  linkedin: { limit: 3000, hard: false },
-  substack: { limit: 600, hard: false },
+const CHAR_LIMITS: Partial<Record<PlatformKey, number>> = {
+  x: 280,
+  linkedin: 3000,
+  substack: 600,
 };
 
-/**
- * Home-screen approval queue (PRD §7.1): stacked cards, newest first,
- * platform tabs, Approve/Reject/Edit/Open-in-Notion, optimistic updates,
- * <100ms tap-to-update.
- */
+type Props = {
+  drafts: ContentItem[];
+  tab: PlatformKey | "all";
+  onTab: (tab: PlatformKey | "all") => void;
+  onRemoved: (id: string) => void;
+  onError: (id: string, item: ContentItem, message: string) => void;
+  onToast: (message: string) => void;
+  onUpdated: (item: ContentItem) => void;
+  incomplete?: boolean;
+};
+
 export function ApprovalQueue({
   drafts,
   tab,
   onTab,
-  onRemoved,
-  onError,
-  onToast,
-}: {
-  drafts: ContentItem[];
-  tab: PlatformKey | "all";
-  onTab: (t: PlatformKey | "all") => void;
-  onRemoved: (id: string) => void;
-  onError: (id: string, item: ContentItem, message: string) => void;
-  onToast: (message: string) => void;
-}) {
-  const visible = drafts.filter((d) => tab === "all" || d.platform === tab);
-
+  incomplete,
+  ...callbacks
+}: Props) {
+  const [query, setQuery] = useState("");
+  const visible = drafts.filter(
+    (d) =>
+      (tab === "all" || d.platform === tab) &&
+      `${d.title} ${d.body}`.toLowerCase().includes(query.toLowerCase()),
+  );
   return (
-    <section aria-label="Approval queue">
-      <div className="mb-3 flex flex-wrap gap-px">
-        {PLATFORM_TABS.map((t) => {
-          const count = drafts.filter((d) => t.key === "all" || d.platform === t.key).length;
-          return (
+    <section aria-label="Drafts to review">
+      <div className="mb-5 flex flex-col gap-4">
+        <div
+          className="flex gap-2 overflow-x-auto pb-1 [&>button]:shrink-0"
+          aria-label="Filter by platform"
+        >
+          {PLATFORM_TABS.map((t) => (
             <button
               key={t.key}
-              type="button"
               onClick={() => onTab(t.key)}
-              className={`flex min-h-11 items-center justify-center px-3 py-1.5 font-mono text-[11px] tracking-[0.1em] transition-colors sm:min-h-0 ${
-                tab === t.key ? "bg-panel text-ink border border-hairline" : "text-ink-dim hover:text-ink border border-transparent"
-              }`}
+              aria-pressed={tab === t.key}
+              className={`btn ${tab === t.key ? "bg-ink text-white" : "btn-secondary"}`}
             >
+              <PlatformLogo platform={t.key} />
               {t.label}
-              {count > 0 && <span className="ml-1.5 text-oxbright">{count}</span>}
+              <span
+                className={tab === t.key ? "text-white/75" : "text-ink-dim"}
+              >
+                {
+                  drafts.filter((d) => t.key === "all" || d.platform === t.key)
+                    .length
+                }
+              </span>
             </button>
-          );
-        })}
+          ))}
+        </div>
+        <label className="flex items-center gap-3 rounded-xl border border-hairline bg-white px-4 py-3">
+          <span aria-hidden="true" className="text-ink-dim">
+            ⌕
+          </span>
+          <span className="sr-only">Search drafts</span>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Find a draft by topic or phrase…"
+            className="min-w-0 w-full bg-transparent outline-none"
+          />
+        </label>
       </div>
-
       {visible.length === 0 ? (
         <FrameCard className="p-8 text-center">
-          <p className="font-mono text-xs tracking-[0.12em] text-ink-dim">QUEUE CLEAR.</p>
+          <h3 className="text-lg font-semibold">
+            {query || tab !== "all"
+              ? "No matching drafts"
+              : incomplete
+                ? "Drafts are temporarily unavailable"
+                : "You’re all caught up"}
+          </h3>
+          <p className="mt-2 text-sm text-ink-dim">
+            {query || tab !== "all"
+              ? "Try a different phrase or view all platforms."
+              : incomplete
+                ? "Some sources could not load. Retry the connection above."
+                : "New drafts will appear here when they’re ready for review."}
+          </p>
+          {(query || tab !== "all") && (
+            <button
+              className="btn btn-secondary mt-4"
+              onClick={() => {
+                setQuery("");
+                onTab("all");
+              }}
+            >
+              Clear filters
+            </button>
+          )}
         </FrameCard>
       ) : (
-        <div className="flex flex-col gap-3">
-          <AnimatePresence mode="popLayout">
-            {visible.map((item, i) => (
-              <DraftCard key={item.id} item={item} index={i} onRemoved={onRemoved} onError={onError} onToast={onToast} />
+        <div className="flex flex-col gap-6">
+          <AnimatePresence initial={false}>
+            {visible.map((item) => (
+              <DraftCard key={item.id} item={item} {...callbacks} />
             ))}
           </AnimatePresence>
         </div>
@@ -80,293 +128,338 @@ export function ApprovalQueue({
 
 function DraftCard({
   item,
-  index,
   onRemoved,
   onError,
   onToast,
-}: {
+  onUpdated,
+}: Pick<Props, "onRemoved" | "onError" | "onToast" | "onUpdated"> & {
   item: ContentItem;
-  index: number;
-  onRemoved: (id: string) => void;
-  onError: (id: string, item: ContentItem, message: string) => void;
-  onToast: (message: string) => void;
 }) {
-  const [editing, setEditing] = useState(false);
+  const [body, setBody] = useState(item.body);
   const [text, setText] = useState(item.body);
-  const [busy, setBusy] = useState<null | "approve" | "reject" | "save">(null);
+  const [edited, setEdited] = useState(item.editedBeforeApproval);
+  const [original, setOriginal] = useState(item.originalDraft);
+  const [editing, setEditing] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
-  const [showOriginal, setShowOriginal] = useState(false);
-  const taRef = useRef<HTMLTextAreaElement>(null);
-  const rejectRowRef = useRef<HTMLDivElement>(null);
-  const blurCheckRef = useRef<number | null>(null);
-
-  // Any pending deferred blur re-check (see onBlur below) must never fire
-  // after this card unmounts — clear it on cleanup rather than let it run
-  // against a detached ref.
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const textRef = useRef<HTMLTextAreaElement>(null);
+  const articleRef = useRef<HTMLElement>(null);
+  const [floatingActions, setFloatingActions] = useState(false);
   useEffect(() => {
+    const update = () => {
+      const box = articleRef.current?.getBoundingClientRect();
+      setFloatingActions(
+        !!box &&
+          window.innerWidth < 768 &&
+          box.top < 160 &&
+          box.bottom > window.innerHeight - 80,
+      );
+    };
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
     return () => {
-      if (blurCheckRef.current !== null) cancelAnimationFrame(blurCheckRef.current);
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
     };
   }, []);
-
-  // Autosize the edit textarea to its content (no fixed rows, no scrollbars).
   useEffect(() => {
-    const el = taRef.current;
-    if (editing && el) {
-      el.style.height = "auto";
-      el.style.height = `${el.scrollHeight}px`;
+    if (editing && textRef.current) {
+      textRef.current.style.height = "auto";
+      textRef.current.style.height = `${textRef.current.scrollHeight}px`;
     }
   }, [editing, text]);
-
-  const act = async (kind: "approve" | "reject", rejectReason?: string) => {
-    setBusy(kind);
-    if (kind === "approve") {
-      // Copy while still inside the tap gesture (clipboard API requirement),
-      // so the approved text is ready to paste into the platform app.
-      const clip = [text || item.title, item.slides].filter(Boolean).join("\n\n---\n\n");
-      try {
-        await navigator.clipboard.writeText(clip);
-        onToast("COPIED — PASTE & POST, THEN MARK POSTED");
-      } catch {
-        /* clipboard denied — the manual lane still has a COPY button */
-      }
-      twinPulse("approve");
+  // Preserve unsaved work while polling; accept refreshed content only outside editing.
+  useEffect(() => {
+    if (!editing) {
+      setBody(item.body);
+      setText(item.body);
+      setEdited(item.editedBeforeApproval);
     }
-    onRemoved(item.id); // optimistic — card leaves immediately
-    const res = await postAction(
-      `/api/items/${item.id}/${kind}`,
-      kind === "reject" && rejectReason ? { reason: rejectReason } : undefined
-    );
-    if (!res.ok) {
-      twinPulse("error");
-      onError(item.id, item, res.error ?? `${kind} failed`);
-    }
-  };
+  }, [item.body, item.editedBeforeApproval, editing]);
 
-  const saveEdit = async () => {
-    setBusy("save");
-    const res = await postAction(`/api/items/${item.id}/edit`, { text });
+  const fail = (message: string) => {
+    setError(message);
     setBusy(null);
-    if (res.ok) {
-      item.body = text;
-      item.editedBeforeApproval = true;
+    twinPulse("error");
+    onError(item.id, item, message);
+  };
+  const approve = async () => {
+    setBusy("approve");
+    setError(null);
+    const res = await postAction(`/api/items/${item.id}/approve`);
+    if (!res.ok) return fail(res.error || "Approval failed. Please try again.");
+    twinPulse("approve");
+    onToast(
+      item.autoPublish
+        ? "Approved. Waiting for the scheduler — see Schedule for progress."
+        : "Approved. Ready to copy and post from Schedule.",
+    );
+    onRemoved(item.id);
+  };
+  const save = async (andApprove = false) => {
+    if (!text.trim()) {
+      setError("Add some content before saving.");
+      return;
+    }
+    setBusy(andApprove ? "save-approve" : "save");
+    setError(null);
+    const res = await postAction(`/api/items/${item.id}/edit`, { text });
+    if (!res.ok)
+      return fail(
+        res.error || "Changes could not be saved. Your text is still here.",
+      );
+    setOriginal(original || body);
+    setBody(text);
+    setEdited(true);
+    // Keep the parent snapshot current so polling and cancellation preserve the saved text.
+    onUpdated({
+      ...item,
+      body: text,
+      editedBeforeApproval: true,
+      originalDraft: original || body,
+    });
+    if (andApprove) await approve();
+    else {
+      setBusy(null);
       setEditing(false);
-    } else {
-      twinPulse("error");
-      onError(item.id, item, res.error ?? "Edit failed");
+      onToast("Changes saved. This draft still needs approval.");
     }
   };
-
-  const cancelReject = () => {
-    setRejecting(false);
-    setReason("");
+  const reject = async (feedback?: string) => {
+    setBusy("reject");
+    setError(null);
+    const res = await postAction(
+      `/api/items/${item.id}/reject`,
+      feedback ? { reason: feedback } : undefined,
+    );
+    if (!res.ok)
+      return fail(
+        res.error || "Could not reject this draft. Please try again.",
+      );
+    onToast(
+      feedback
+        ? "Draft rejected. Your feedback was saved for training."
+        : "Draft rejected without feedback.",
+    );
+    onRemoved(item.id);
   };
-
-  const limitDef = CHAR_LIMITS[item.platform];
-  const over = limitDef ? text.length > limitDef.limit : false;
-  const counterClass = !over
-    ? "text-ink-dim/70"
-    : limitDef?.hard
-      ? "text-oxbright"
-      : "text-amber";
-
+  const limit = CHAR_LIMITS[item.platform];
+  const startEditing = () => {
+    setEditing(true);
+    setRejecting(false);
+    setError(null);
+  };
   return (
-    <FrameCard index={index} sweep className="p-4 sm:p-5">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="font-mono text-[11px] tracking-[0.12em] text-ink-dim">
-          {item.platformLabel.toUpperCase()}
-          {item.editedBeforeApproval && <span className="ml-2 text-amber">EDITED</span>}
-          {item.inCanva && <span className="ml-2 text-slate">IN CANVA</span>}
-        </span>
-        <span className="font-mono text-[11px] text-ink-dim/80">{formatSgt(item.createdTime)}</span>
-      </div>
-
-      {item.platform === "x" && item.title && item.title !== item.body && (
-        <p className="mt-2 font-mono text-[11px] tracking-wider text-ink-dim">HOOK: {item.title}</p>
-      )}
-
-      {editing ? (
-        <>
-          {item.originalDraft && (
-            <div className="mt-3 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setShowOriginal((v) => !v)}
-                className="flex min-h-11 items-center border border-hairline px-2 py-0.5 font-mono text-[11px] tracking-wider text-ink-dim hover:text-ink sm:min-h-0"
-              >
-                {showOriginal ? "HIDE ORIGINAL" : "VS ORIGINAL"}
-              </button>
-            </div>
-          )}
-          {showOriginal && item.originalDraft && (
-            <div className="mt-2 border border-hairline-faint bg-ground/40 p-3">
-              <div className="font-mono text-[11px] tracking-[0.12em] text-ink-dim/70">ORIGINAL DRAFT</div>
-              <div className="mt-1 whitespace-pre-wrap break-words font-serif text-sm leading-relaxed text-ink-dim">
-                {item.originalDraft}
-              </div>
-            </div>
-          )}
-          <textarea
-            ref={taRef}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            className="mt-3 w-full resize-none overflow-hidden border border-hairline bg-ground p-3 font-serif text-[15px] leading-relaxed text-ink focus:border-ink/40 focus:outline-none"
-            autoFocus
-          />
-        </>
-      ) : (
-        // The content is the hero — Newsreader, reads like writing (PRD §5.2)
-        <div className="mt-3 whitespace-pre-wrap break-words font-serif text-[15px] leading-relaxed text-ink">{item.body}</div>
-      )}
-
-      {item.slides && !editing && (
-        <details className="mt-3 border border-hairline-faint p-3">
-          <summary className="cursor-pointer font-mono text-[11px] tracking-[0.1em] text-ink-dim">
-            SLIDE TEXTS
-          </summary>
-          <div className="mt-2 whitespace-pre-wrap break-words font-serif text-sm leading-relaxed text-ink-dim">{item.slides}</div>
-        </details>
-      )}
-
-      <div className="mt-2 flex items-center justify-between">
-        {limitDef ? (
-          <span className={`font-mono text-[11px] ${counterClass}`}>
-            {text.length} / {limitDef.limit} CH
-          </span>
-        ) : (
-          <span />
+    <article
+      ref={articleRef}
+      id={`draft-${item.id}`}
+      tabIndex={-1}
+      className="scroll-mt-28"
+      aria-label={`${item.platformLabel} draft: ${item.title || body.slice(0, 50)}`}
+    >
+      <FrameCard sweep className="p-5 sm:p-7">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-2 rounded-md bg-ground px-2.5 py-1 font-semibold">
+              <PlatformLogo platform={item.platform} />
+              {item.platformLabel}
+            </span>
+            {edited && <span className="text-amber">Edited</span>}
+            {item.inCanva && <span className="text-ink-dim">In Canva</span>}
+          </div>
+          <time className="text-ink-dim" dateTime={item.createdTime}>
+            {formatSgt(item.createdTime)}
+          </time>
+        </div>
+        {item.title && item.title !== body && (
+          <h3 className="mt-5 text-base font-semibold">{item.title}</h3>
         )}
-        <a
-          href={item.notionUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="font-mono text-[11px] tracking-wider text-ink-dim underline decoration-hairline underline-offset-4 hover:text-ink"
-        >
-          OPEN IN NOTION ↗
-        </a>
-      </div>
-
-      <div className="mt-4 flex gap-2">
         {editing ? (
-          <>
-            <button
-              type="button"
-              disabled={busy === "save"}
-              onClick={saveEdit}
-              className="flex min-h-11 flex-1 items-center justify-center border border-ink/30 bg-ink/10 px-4 py-2.5 font-mono text-xs tracking-[0.1em] text-ink hover:bg-ink/15 disabled:opacity-50 sm:min-h-0"
+          <div className="mt-5">
+            <label
+              htmlFor={`edit-${item.id}`}
+              className="mb-2 block text-sm font-semibold"
             >
-              {busy === "save" ? "SAVING…" : "SAVE"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setEditing(false);
-                setText(item.body);
-              }}
-              className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.1em] text-ink-dim hover:text-ink sm:min-h-0"
-            >
-              CANCEL
-            </button>
-          </>
-        ) : rejecting ? (
-          // Inline reject-with-reason row (one extra tap max). The reason
-          // becomes a pending unclassified amendment; SKIP rejects with none.
-          // Escape or focus leaving the row cancels.
-          <div
-            ref={rejectRowRef}
-            className="flex w-full gap-2"
-            onBlur={(e) => {
-              // Touch devices (notably iOS Safari) don't move focus to a
-              // <button> on tap, so a tap on REJECT/SKIP fires this blur with
-              // relatedTarget: null — indistinguishable, by that field alone,
-              // from focus genuinely leaving the row. Trusting it naively
-              // (`!contains(relatedTarget)` treating null as "outside") calls
-              // cancelReject() synchronously, which unmounts this row —
-              // including the button mid-tap — before its own onClick can
-              // fire, so the reject request never goes out. Belt: the
-              // buttons below preventDefault on pointerdown so focus never
-              // actually leaves the input on tap, and this handler shouldn't
-              // even run. Braces: if it does run with a null relatedTarget,
-              // defer one frame and re-check where focus actually landed
-              // (rather than trusting the stale relatedTarget) before
-              // cancelling, so a genuine click on REJECT/SKIP always wins.
-              if (e.relatedTarget && e.currentTarget.contains(e.relatedTarget as Node)) return;
-              if (blurCheckRef.current !== null) cancelAnimationFrame(blurCheckRef.current);
-              blurCheckRef.current = requestAnimationFrame(() => {
-                blurCheckRef.current = null;
-                const row = rejectRowRef.current;
-                if (!row) return; // unmounted (e.g. the action already went through)
-                if (!row.contains(document.activeElement)) cancelReject();
-              });
-            }}
-          >
-            <input
-              type="text"
-              value={reason}
+              Edit draft
+            </label>
+            <textarea
+              id={`edit-${item.id}`}
+              ref={textRef}
               autoFocus
-              placeholder="Why? (optional — becomes a calibration signal)"
-              onChange={(e) => setReason(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") cancelReject();
-                if (e.key === "Enter") act("reject", reason.trim() || undefined);
-              }}
-              className="min-h-11 min-w-0 flex-1 border border-hairline bg-ground px-3 py-2 font-mono text-xs text-ink placeholder:text-ink-dim/50 focus:border-ink/40 focus:outline-none sm:min-h-0"
+              disabled={!!busy}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              className="w-full resize-none rounded-xl border border-hairline bg-ground/50 p-4 font-serif text-lg leading-relaxed"
             />
-            <button
-              type="button"
-              disabled={busy !== null}
-              // Stops focus from ever leaving the input on tap (touch
-              // devices don't focus buttons on tap anyway, but this also
-              // covers mouse/desktop), so the onBlur above never fires for a
-              // genuine REJECT tap in the first place. Does not suppress the
-              // click event that follows.
-              onPointerDown={(e) => e.preventDefault()}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => act("reject", reason.trim() || undefined)}
-              className="flex min-h-11 items-center justify-center border border-oxbright/60 bg-oxblood/30 px-3 py-2 font-mono text-xs tracking-[0.1em] text-ink hover:bg-oxblood/50 disabled:opacity-50 sm:min-h-0"
-            >
-              REJECT
-            </button>
-            <button
-              type="button"
-              disabled={busy !== null}
-              onPointerDown={(e) => e.preventDefault()}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => act("reject")}
-              className="flex min-h-11 items-center justify-center border border-hairline px-3 py-2 font-mono text-xs tracking-[0.1em] text-ink-dim hover:text-ink disabled:opacity-50 sm:min-h-0"
-            >
-              SKIP
-            </button>
+            {original && (
+              <details className="mt-3 text-sm">
+                <summary className="cursor-pointer py-2 text-ink-dim">
+                  Compare with original
+                </summary>
+                <p className="mt-2 whitespace-pre-wrap rounded-lg bg-ground p-4 font-serif text-lg">
+                  {original}
+                </p>
+              </details>
+            )}
           </div>
         ) : (
-          <>
-            <button
-              type="button"
-              disabled={busy !== null}
-              onClick={() => act("approve")}
-              className="flex min-h-11 flex-1 items-center justify-center border border-oxbright/60 bg-oxblood/30 px-4 py-2.5 font-mono text-xs tracking-[0.1em] text-ink hover:bg-oxblood/50 active:bg-oxblood/70 disabled:opacity-50 sm:min-h-0"
-            >
-              APPROVE
-            </button>
-            <button
-              type="button"
-              disabled={busy !== null}
-              onClick={() => setRejecting(true)}
-              className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.1em] text-ink-dim hover:text-ink disabled:opacity-50 sm:min-h-0"
-            >
-              REJECT
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.1em] text-ink-dim hover:text-ink sm:min-h-0"
-            >
-              EDIT
-            </button>
-          </>
+          <p className="mt-5 max-w-[68ch] whitespace-pre-wrap break-words font-serif text-[19px] leading-[1.65]">
+            {body}
+          </p>
         )}
-      </div>
-    </FrameCard>
+        {item.slides && (
+          <details className="mt-4 rounded-xl bg-ground/60 p-4">
+            <summary className="cursor-pointer text-sm font-semibold">
+              Slide text
+            </summary>
+            <p className="mt-3 whitespace-pre-wrap font-serif text-lg">
+              {item.slides}
+            </p>
+          </details>
+        )}
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-2 text-sm text-ink-dim">
+          <span>
+            {limit
+              ? `${(editing ? text : body).length} / ${limit} characters${(editing ? text : body).length > limit ? " · Review length" : ""}`
+              : `${body.length} characters`}
+          </span>
+          <a
+            href={item.notionUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-11 items-center underline underline-offset-4"
+          >
+            Open in Notion ↗
+          </a>
+        </div>
+        <div className="mt-2 rounded-lg bg-ground/65 px-3 py-2 text-sm text-ink-dim">
+          {item.autoPublish
+            ? "Automatic publishing · Approval sends this to the scheduler."
+            : "Manual publishing · After approval, copy the content and post it yourself."}
+        </div>
+        {error && (
+          <p role="alert" className="mt-4 text-sm text-oxblood">
+            {error}
+          </p>
+        )}
+        <div className="mt-5 min-h-[60px] md:min-h-0">
+          <div
+            className={
+              floatingActions && !editing && !rejecting
+                ? "review-actions fixed inset-x-4 z-20 rounded-xl border border-hairline bg-white p-2 shadow-lg"
+                : "rounded-xl bg-white"
+            }
+          >
+            {editing ? (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  disabled={!!busy}
+                  className="btn btn-primary flex-1"
+                  onClick={() => save(true)}
+                >
+                  {busy === "save-approve" || busy === "approve"
+                    ? "Saving & approving…"
+                    : "Save & approve"}
+                </button>
+                <button
+                  disabled={!!busy}
+                  className="btn btn-secondary"
+                  onClick={() => save()}
+                >
+                  {busy === "save" ? "Saving…" : "Save changes"}
+                </button>
+                <button
+                  disabled={!!busy}
+                  className="btn btn-quiet"
+                  onClick={() => {
+                    setText(body);
+                    setEditing(false);
+                    setError(null);
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : rejecting ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!busy) reject(reason.trim() || undefined);
+                }}
+              >
+                <label
+                  htmlFor={`reason-${item.id}`}
+                  className="block text-sm font-semibold"
+                >
+                  What should your twin learn?{" "}
+                  <span className="font-normal text-ink-dim">Optional</span>
+                </label>
+                <textarea
+                  id={`reason-${item.id}`}
+                  autoFocus
+                  disabled={!!busy}
+                  rows={2}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="e.g. This sounds too promotional."
+                  className="mt-2 w-full rounded-lg border border-hairline p-3"
+                />
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    disabled={!!busy}
+                    className="btn btn-primary"
+                    type="submit"
+                  >
+                    {busy
+                      ? "Rejecting…"
+                      : reason.trim()
+                        ? "Reject & save feedback"
+                        : "Reject without feedback"}
+                  </button>
+                  <button
+                    disabled={!!busy}
+                    type="button"
+                    className="btn btn-quiet"
+                    onClick={() => {
+                      setRejecting(false);
+                      setReason("");
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  disabled={!!busy}
+                  className="btn btn-primary flex-1"
+                  onClick={approve}
+                >
+                  {busy ? "Approving…" : "Approve"}
+                </button>
+                <button
+                  disabled={!!busy}
+                  className="btn btn-secondary"
+                  onClick={startEditing}
+                >
+                  Edit
+                </button>
+                <button
+                  disabled={!!busy}
+                  className="btn btn-quiet"
+                  onClick={() => setRejecting(true)}
+                >
+                  Reject
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </FrameCard>
+    </article>
   );
 }

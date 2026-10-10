@@ -43,7 +43,11 @@ export function NovaStage({
   idleLine: string;
   onToast: (message: string) => void;
 }) {
-  const { data, refresh } = useApi<Survey>("/api/calibration", 300_000);
+  const { data, refresh, error, loading } = useApi<Survey>(
+    "/api/calibration",
+    300_000,
+  );
+  const [showAnimation, setShowAnimation] = useState(false);
   const [skipped, setSkipped] = useState<string[]>([]);
   const [submitted, setSubmitted] = useState<string[]>([]);
   const [verdict, setVerdict] = useState<Verdict | null>(null);
@@ -51,14 +55,14 @@ export function NovaStage({
   const [busy, setBusy] = useState(false);
 
   const open = (data?.questions ?? []).filter(
-    (q) => q.answerBlockId && !q.existingAnswer && !submitted.includes(q.answerBlockId)
+    (q) =>
+      q.answerBlockId &&
+      !q.existingAnswer &&
+      !submitted.includes(q.answerBlockId) &&
+      !skipped.includes(q.answerBlockId),
   );
-  // Skipped questions rotate to the back of the queue
-  const ordered = [
-    ...open.filter((q) => !skipped.includes(q.answerBlockId!)),
-    ...open.filter((q) => skipped.includes(q.answerBlockId!)),
-  ];
-  const q = ordered[0] ?? null;
+  // Deferred questions stay out of this review until explicitly revisited.
+  const q = open[0] ?? null;
   const asking = q !== null;
 
   // While a question is up, the floating card is Nova's voice — keep the
@@ -78,7 +82,9 @@ export function NovaStage({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ objectId: q.answerBlockId, topic: q.title }),
     }).catch(() => {});
-    setSkipped((s) => (s.includes(q.answerBlockId!) ? s : [...s, q.answerBlockId!]));
+    setSkipped((s) =>
+      s.includes(q.answerBlockId!) ? s : [...s, q.answerBlockId!],
+    );
     next();
   };
 
@@ -103,7 +109,11 @@ export function NovaStage({
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
       twinPulse("approve");
-      onToast(json.calibrated ? "ANSWER SAVED — POSITION CALIBRATED" : "ANSWER SAVED TO THE SURVEY");
+      onToast(
+        json.calibrated
+          ? "ANSWER SAVED — POSITION CALIBRATED"
+          : "ANSWER SAVED TO THE SURVEY",
+      );
       setSubmitted((s) => [...s, q.answerBlockId!]);
       next();
       setTimeout(refresh, 1500);
@@ -117,8 +127,44 @@ export function NovaStage({
 
   return (
     <div className="relative flex w-full flex-col items-center">
-      <Nova mood={asking ? "neutral" : mood} line={line} />
+      <button
+        className="btn btn-quiet my-3"
+        aria-expanded={showAnimation}
+        onClick={() => setShowAnimation((v) => !v)}
+      >
+        {showAnimation ? "Hide animation" : "Show Nova animation"}
+      </button>
+      {showAnimation && (
+        <div className="w-full max-w-[240px]">
+          <Nova mood={asking ? "neutral" : mood} line={line} />
+        </div>
+      )}
+      {loading && !data && (
+        <p role="status" className="py-5 text-sm text-ink-dim">
+          Loading your next question…
+        </p>
+      )}
+      {error && (
+        <div role="alert" className="my-4 rounded-xl bg-amber/10 p-4 text-sm">
+          <p>Your questions could not be loaded. Your answers are safe.</p>
+          <button className="btn btn-secondary mt-3" onClick={refresh}>
+            Retry questions
+          </button>
+        </div>
+      )}
+      {!loading && !error && !asking && (
+        <p className="py-5 text-sm text-ink-dim">
+          {skipped.length
+            ? "You’ve set the remaining questions aside for later."
+            : "You’re up to date. New questions will appear here when ready."}
+        </p>
+      )}
 
+      {!asking && skipped.length > 0 && (
+        <button className="btn btn-secondary" onClick={() => setSkipped([])}>
+          Revisit deferred questions
+        </button>
+      )}
       {asking && q && (
         // The question tucks over the hologram's lower edge — Nova is
         // asking. Must stay IN FLOW (negative margin, not absolute top-%):
@@ -127,16 +173,18 @@ export function NovaStage({
         // The fixed overlap doesn't track Nova's fluid height exactly, but
         // its worst case is covering a little more or less of her — never
         // covering other content.
-        <div className="relative z-10 -mt-14 flex w-full justify-center px-4 sm:-mt-36">
-          <div className="w-full max-w-xl border border-hairline bg-panel/90 p-4 shadow-[0_0_40px_rgba(0,0,0,0.6)] sm:p-5">
+        <div className="relative flex w-full justify-center">
+          <div className="w-full rounded-xl border border-hairline-faint bg-ground/60 p-4 sm:p-5">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <span className="font-mono text-[11px] tracking-[0.15em] text-oxbright">
-                CALIBRATION · {open.length} LEFT THIS ROUND
+              <span className="text-sm font-semibold text-oxbright">
+                Check-in · {open.length} questions remaining
               </span>
               {q.tag && (
                 <span
-                  className={`font-mono text-[11px] tracking-wider ${
-                    q.tag.toLowerCase() === "contested" ? "text-oxbright" : "text-amber"
+                  className={`text-sm ${
+                    q.tag.toLowerCase() === "contested"
+                      ? "text-oxbright"
+                      : "text-amber"
                   }`}
                 >
                   {q.tag.toUpperCase()}
@@ -144,19 +192,28 @@ export function NovaStage({
               )}
             </div>
 
-            <h3 className="mt-1.5 break-words text-base font-semibold text-ink">{q.title}</h3>
+            <h3 className="mt-1.5 break-words text-base font-semibold text-ink">
+              {q.title}
+            </h3>
             {q.guess && (
-              <p className="mt-1.5 break-words font-serif text-[14px] leading-relaxed text-ink">{q.guess}</p>
+              <p className="mt-1.5 break-words font-serif text-lg leading-relaxed text-ink">
+                {q.guess}
+              </p>
             )}
-            {q.why && <p className="mt-1.5 break-words text-xs leading-relaxed text-ink-dim">{q.why}</p>}
+            {q.why && (
+              <p className="mt-1.5 break-words text-xs leading-relaxed text-ink-dim">
+                {q.why}
+              </p>
+            )}
 
             <div className="mt-3 flex flex-wrap items-center gap-px">
               {VERDICTS.map((v) => (
                 <button
                   key={v}
                   type="button"
+                  aria-pressed={verdict === v}
                   onClick={() => setVerdict(verdict === v ? null : v)}
-                  className={`flex min-h-11 items-center justify-center px-3 py-1.5 font-mono text-[11px] tracking-[0.1em] transition-colors sm:min-h-0 ${
+                  className={`flex min-h-11 items-center justify-center px-3 py-1.5 text-sm transition-colors  ${
                     verdict === v
                       ? v === "Reject"
                         ? "border border-oxbright/60 bg-oxblood/30 text-ink"
@@ -164,7 +221,7 @@ export function NovaStage({
                       : "border border-hairline text-ink-dim hover:text-ink"
                   }`}
                 >
-                  {v.toUpperCase()}
+                  {v === "Sharpen" ? "Refine" : v}
                 </button>
               ))}
               {q.positionUrl && (
@@ -172,9 +229,9 @@ export function NovaStage({
                   href={q.positionUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="ml-auto font-mono text-[11px] tracking-wider text-ink-dim underline decoration-hairline underline-offset-4 hover:text-ink"
+                  className="ml-auto text-sm text-ink-dim underline decoration-hairline underline-offset-4 hover:text-ink"
                 >
-                  POSITION ↗
+                  View position ↗
                 </a>
               )}
             </div>
@@ -183,8 +240,9 @@ export function NovaStage({
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="Your real view, in your own words. Messy is fine."
+              aria-label="Your perspective"
               rows={3}
-              className="mt-2 w-full resize-y border border-hairline bg-ground p-3 font-serif text-[14px] leading-relaxed text-ink placeholder:text-ink-dim/50 focus:border-ink/40 focus:outline-none"
+              className="mt-2 w-full resize-y border border-hairline bg-ground p-3 font-serif text-lg leading-relaxed text-ink placeholder:text-ink-dim/50 focus:border-ink/40 focus:outline-none"
             />
 
             <div className="mt-2 flex gap-2">
@@ -192,17 +250,17 @@ export function NovaStage({
                 type="button"
                 disabled={busy}
                 onClick={submit}
-                className="flex min-h-11 flex-1 items-center justify-center border border-oxbright/60 bg-oxblood/30 px-4 py-2.5 font-mono text-xs tracking-[0.12em] text-ink hover:bg-oxblood/50 active:bg-oxblood/70 disabled:opacity-50 sm:min-h-0"
+                className="flex min-h-11 flex-1 items-center justify-center border border-oxbright/60 bg-oxblood/30 px-4 py-2.5 text-sm font-semibold text-ink hover:bg-oxblood/50 active:bg-oxblood/70 disabled:opacity-50 "
               >
-                {busy ? "CALIBRATING…" : "SUBMIT"}
+                {busy ? "Saving…" : "Save answer"}
               </button>
               <button
                 type="button"
                 disabled={busy}
                 onClick={skip}
-                className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 font-mono text-xs tracking-[0.1em] text-ink-dim hover:text-ink disabled:opacity-50 sm:min-h-0"
+                className="flex min-h-11 items-center justify-center border border-hairline px-4 py-2.5 text-sm text-ink-dim hover:text-ink disabled:opacity-50 "
               >
-                LATER
+                Later
               </button>
             </div>
           </div>

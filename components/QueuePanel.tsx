@@ -1,26 +1,13 @@
 "use client";
 
+import { PlatformLogo } from "./PlatformLogo";
+
 import { useState } from "react";
 import { FrameCard } from "./FrameCard";
-import { StatusPill } from "./StatusPill";
 import { postAction } from "./useApi";
-import { ContentItem, formatSgt, twinPulse } from "./types";
+import { ContentItem, formatSgt } from "./types";
 
-/**
- * Queue & Posted panel (PRD §7.2) + the "post manually" lane (PRD §7.1).
- * Rejected items stay visible here (last 10) so a decision always leaves
- * a visible trace in the command center.
- */
-export function QueuePanel({
-  approved,
-  queued,
-  posted,
-  manual,
-  rejected,
-  index,
-  onChanged,
-  onError,
-}: {
+type Props = {
   approved: ContentItem[];
   queued: ContentItem[];
   posted: ContentItem[];
@@ -28,154 +15,207 @@ export function QueuePanel({
   rejected: ContentItem[];
   index: number;
   onChanged: () => void;
-  onError: (msg: string) => void;
-}) {
-  const [busyId, setBusyId] = useState<string | null>(null);
-
-  const run = async (path: string, pulse = false) => {
-    setBusyId(path);
-    const res = await postAction(path);
-    setBusyId(null);
+  onError: (message: string) => void;
+};
+export function QueuePanel({
+  approved,
+  queued,
+  posted,
+  manual,
+  rejected,
+  onChanged,
+  onError,
+}: Props) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const run = async (item: ContentItem, action: string, success: string) => {
+    setBusy(item.id);
+    const res = await postAction(`/api/items/${item.id}/${action}`);
+    setBusy(null);
     if (res.ok) {
-      if (pulse) twinPulse("approve");
+      onError(success);
       onChanged();
-    } else {
-      twinPulse("error");
-      onError(res.error ?? "Action failed");
+    } else
+      onError(
+        res.error || "That action could not be completed. Please try again.",
+      );
+  };
+  const copy = async (item: ContentItem) => {
+    try {
+      await navigator.clipboard.writeText(
+        [item.body || item.title, item.slides]
+          .filter(Boolean)
+          .join("\n\n---\n\n"),
+      );
+      setCopied(item.id);
+      onError(
+        "Copied. Paste into the platform, publish, then mark as posted here.",
+      );
+    } catch {
+      onError(
+        "Clipboard access was blocked. Open the post in Notion to copy the content.",
+      );
     }
   };
-
-  const Row = ({ item, children }: { item: ContentItem; children?: React.ReactNode }) => (
-    <li className="flex flex-col gap-1 border-b border-hairline-faint py-2 last:border-b-0">
-      <div className="flex items-baseline justify-between gap-2">
+  const row = (item: ContentItem, action?: React.ReactNode) => (
+    <li
+      key={item.id}
+      className="flex flex-col gap-3 border-t border-hairline-faint py-4 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div className="min-w-0">
+        <p className="flex items-center gap-2 text-sm font-semibold text-ink">
+          <PlatformLogo platform={item.platform} />
+          {item.platformLabel}
+        </p>
         <a
           href={item.notionUrl}
           target="_blank"
           rel="noreferrer"
-          className="min-w-0 flex-1 truncate text-sm text-ink hover:underline"
+          className="mt-1 block break-words text-base font-semibold hover:underline"
         >
-          {item.title || item.body.slice(0, 60) || "Untitled"}
+          {item.title || item.body.slice(0, 100) || "Untitled post"}{" "}
+          <span className="text-ink-dim">↗</span>
         </a>
-        <StatusPill status={item.status} />
+        <p className="mt-1 text-sm text-ink-dim">
+          {item.scheduledAt
+            ? `${formatSgt(item.scheduledAt)} SGT`
+            : item.status === "Approved"
+              ? item.autoPublish
+                ? "Waiting for the scheduler"
+                : "Ready for you to post"
+              : item.status}
+        </p>
       </div>
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[11px] leading-snug text-ink-dim/80">
-          {item.platformLabel.toUpperCase()}
-          {item.scheduledAt && ` · ${formatSgt(item.scheduledAt)}`}
-        </span>
-        <span className="flex gap-2">{children}</span>
-      </div>
+      {action && <div className="flex shrink-0 flex-wrap gap-2">{action}</div>}
     </li>
   );
-
-  const MiniBtn = ({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) => (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className="flex min-h-11 items-center justify-center border border-hairline px-2 py-0.5 font-mono text-[11px] tracking-wider text-ink-dim hover:text-ink disabled:opacity-40 sm:min-h-0"
-    >
-      {label}
-    </button>
-  );
-
   return (
-    <FrameCard index={index} className="p-4">
-      <h2 className="font-mono text-[11px] tracking-[0.12em] text-ink-dim">QUEUE &amp; POSTED</h2>
-
-      {/* This list was making the page very long, so it's capped and scrolls
-          internally instead. The cap lives on this inner wrapper (not on
-          FrameCard) so the "QUEUE & POSTED" title above stays put and never
-          scrolls away. 60vh keeps the rail compact next to Nova on desktop;
-          a shorter 50vh cap below lg keeps it from dominating the mobile
-          single-column stack. No overscroll-behavior here on purpose: once
-          the inner list hits its scroll end, the wheel/touch gesture chains
-          to the page scroll by default, so the panel never traps scrolling —
-          it just adds one more (thin, hairline-styled) scroll region rather
-          than blocking the page underneath it. */}
-      <div className="max-h-[50vh] overflow-y-auto lg:max-h-[60vh]">
-
-        {manual.length > 0 && (
-          <>
-            <h3 className="mt-3 font-mono text-[11px] tracking-[0.12em] text-amber">APPROVED — POST MANUALLY</h3>
-            <ul className="mt-1">
-              {manual.map((item) => (
-                <Row key={item.id} item={item}>
-                  <MiniBtn
-                    label="COPY"
+    <div className="space-y-6">
+      {manual.length > 0 && (
+        <FrameCard className="p-5 sm:p-7">
+          <h2 className="panel-heading">
+            Ready to post manually{" "}
+            <span className="ml-2 text-ink-dim">{manual.length}</span>
+          </h2>
+          <p className="mt-1 text-sm text-ink-dim">
+            Copy your content, publish it in the platform, then mark it as
+            posted.
+          </p>
+          <ul className="mt-4">
+            {manual.map((item) =>
+              row(
+                item,
+                <>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => copy(item)}
+                  >
+                    {copied === item.id ? "Copy again" : "Copy content"}
+                  </button>
+                  <button
+                    disabled={!!busy}
+                    className="btn btn-primary"
                     onClick={() =>
-                      navigator.clipboard.writeText(
-                        [item.body || item.title, item.slides].filter(Boolean).join("\n\n---\n\n")
-                      )
+                      run(item, "mark-posted", "Marked as posted.")
                     }
-                  />
-                  <MiniBtn
-                    label="MARK POSTED"
-                    disabled={busyId !== null}
-                    onClick={() => run(`/api/items/${item.id}/mark-posted`, true)}
-                  />
-                </Row>
-              ))}
-            </ul>
-          </>
-        )}
-
-        {approved.length > 0 && (
-          <>
-            <h3 className="mt-3 font-mono text-[11px] tracking-[0.12em] text-ink-dim/80">APPROVED — AWAITING SCHEDULER</h3>
-            <ul className="mt-1">
-              {approved.map((item) => (
-                <Row key={item.id} item={item}>
-                  <MiniBtn
-                    label="PUBLISH NEXT SLOT"
-                    disabled={busyId !== null}
-                    onClick={() => run(`/api/items/${item.id}/publish-next`, true)}
-                  />
-                </Row>
-              ))}
-            </ul>
-          </>
-        )}
-
-        {queued.length > 0 && (
-          <>
-            <h3 className="mt-3 font-mono text-[11px] tracking-[0.12em] text-ink-dim/80">SCHEDULED</h3>
-            <ul className="mt-1">
-              {queued.map((item) => (
-                <Row key={item.id} item={item}>
-                  <MiniBtn
-                    label="UNQUEUE"
-                    disabled={busyId !== null}
-                    onClick={() => run(`/api/items/${item.id}/unqueue`)}
-                  />
-                </Row>
-              ))}
-            </ul>
-          </>
-        )}
-
-        <h3 className="mt-3 font-mono text-[11px] tracking-[0.12em] text-ink-dim/80">RECENTLY POSTED</h3>
-        {posted.length === 0 ? (
-          <p className="mt-1 py-1 font-mono text-[11px] text-ink-dim/60">Nothing posted yet.</p>
-        ) : (
-          <ul className="mt-1">
-            {posted.map((item) => (
-              <Row key={item.id} item={item} />
-            ))}
+                  >
+                    {busy === item.id ? "Updating…" : "Mark as posted"}
+                  </button>
+                </>,
+              ),
+            )}
           </ul>
+        </FrameCard>
+      )}
+      {approved.length > 0 && (
+        <FrameCard className="p-5 sm:p-7">
+          <h2 className="panel-heading">
+            Waiting for scheduling{" "}
+            <span className="ml-2 text-ink-dim">{approved.length}</span>
+          </h2>
+          <p className="mt-1 text-sm text-ink-dim">
+            The scheduler assigns the next available slot. You can also schedule
+            a post now.
+          </p>
+          <ul className="mt-4">
+            {approved.map((item) =>
+              row(
+                item,
+                <button
+                  disabled={!!busy}
+                  className="btn btn-secondary"
+                  onClick={() =>
+                    run(
+                      item,
+                      "publish-next",
+                      "Sent to the next available slot. Refreshing the schedule…",
+                    )
+                  }
+                >
+                  {busy === item.id ? "Scheduling…" : "Schedule next slot"}
+                </button>,
+              ),
+            )}
+          </ul>
+        </FrameCard>
+      )}
+      <FrameCard className="p-5 sm:p-7">
+        <h2 className="panel-heading">
+          Scheduled <span className="ml-2 text-ink-dim">{queued.length}</span>
+        </h2>
+        <p className="mt-1 text-sm text-ink-dim">
+          All times are Singapore time (SGT).
+        </p>
+        {queued.length ? (
+          <ul className="mt-4">
+            {queued.map((item) =>
+              row(
+                item,
+                <button
+                  disabled={!!busy}
+                  className="btn btn-secondary"
+                  onClick={() =>
+                    run(
+                      item,
+                      "unqueue",
+                      "Removed from this slot. The post is approved and may be scheduled again.",
+                    )
+                  }
+                >
+                  {busy === item.id ? "Updating…" : "Release slot"}
+                </button>,
+              ),
+            )}
+          </ul>
+        ) : (
+          <p className="mt-5 rounded-xl bg-ground p-5 text-sm text-ink-dim">
+            No scheduled posts are shown. Approve an automatic-publishing draft
+            to add it to the scheduler.
+          </p>
         )}
-
-        {rejected.length > 0 && (
-          <>
-            <h3 className="mt-3 font-mono text-[11px] tracking-[0.12em] text-ink-dim/80">RECENTLY REJECTED</h3>
-            <ul className="mt-1">
-              {rejected.map((item) => (
-                <Row key={item.id} item={item} />
-              ))}
-            </ul>
-          </>
-        )}
+      </FrameCard>
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        <FrameCard className="p-5 sm:p-7">
+          <h2 className="panel-heading">Recently posted</h2>
+          {posted.length ? (
+            <ul className="mt-4">{posted.map((item) => row(item))}</ul>
+          ) : (
+            <p className="mt-3 text-sm text-ink-dim">
+              Your published posts will appear here.
+            </p>
+          )}
+        </FrameCard>
+        <FrameCard className="p-5 sm:p-7">
+          <h2 className="panel-heading">Recently rejected</h2>
+          {rejected.length ? (
+            <ul className="mt-4">{rejected.map((item) => row(item))}</ul>
+          ) : (
+            <p className="mt-3 text-sm text-ink-dim">
+              No rejected posts are shown.
+            </p>
+          )}
+        </FrameCard>
       </div>
-    </FrameCard>
+    </div>
   );
 }

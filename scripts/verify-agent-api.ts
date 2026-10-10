@@ -107,10 +107,10 @@ async function keyless() {
     console.log("  skip — HERMES_API_TOKEN unset (or identical to AGENT_API_TOKEN, which would defeat separate revocation)");
     if (hermes && hermes === agent) assert("AGENT_API_TOKEN differs from HERMES_API_TOKEN", false);
   }
-  if (agent && hermes !== agent) {
-    const r = await call("GET", "/api/hermes/export", { token: agent });
-    assert("AGENT_API_TOKEN rejected on /api/hermes/export → 401", r.status === 401);
-  } else if (!agent) {
+  // The /api/hermes/* lane was retired (Oct 2026 redesign) — there is no
+  // hermes endpoint left to cross-probe. Token isolation is still asserted
+  // above: the hermes token (if set) must be rejected on the agent lane.
+  if (!agent) {
     console.log("  skip — AGENT_API_TOKEN unset in this environment");
   }
   const session = await call("GET", "/api/queue");

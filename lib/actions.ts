@@ -7,7 +7,7 @@
 import { PLATFORM_EVENT_NAMES } from "./config";
 import { readItemBody, toContentItem, platformFromPage } from "./items";
 import { CalibrationPlatform, CalibrationSource, logCalibrationEvent } from "./calibration-events";
-import { getProposal, maybeCreateAmendmentFromDraftEvent, setProposalStatus } from "./proposals";
+import { getProposal, setProposalStatus } from "./proposals";
 import {
   buildStatusUpdate,
   getPage,
@@ -102,13 +102,14 @@ export async function rejectItem(pageId: string, source: CalibrationSource = "co
   const status = readStatus(page);
   if (status !== "Draft") throw new ActionError(`Cannot reject an item with status "${status ?? "unknown"}"`);
   const dsId = process.env[p.dsEnv]!;
+  const rejectedBody = await readItemBody(page, p);
   await updatePage(pageId, await buildStatusUpdate(dsId, "Rejected"));
   // Non-fatal: status already flipped; don't 500 an applied reject on a
   // transient Pipeline Events failure (matches logCalibrationEvent).
   await logEvent({ event: "Rejected", platform: PLATFORM_EVENT_NAMES[p.key], itemUrl: page.url }).catch((err) =>
     console.warn("logEvent (Rejected) failed — action already applied:", err)
   );
-  const rejectEvent = await logCalibrationEvent({
+  await logCalibrationEvent({
     source,
     action: "reject",
     objectType: "draft",
@@ -116,11 +117,12 @@ export async function rejectItem(pageId: string, source: CalibrationSource = "co
     platform: calibrationPlatform(p.key),
     topic: readTitle(page),
     rawUserText: reason,
+    previousText: rejectedBody,
   });
   // Identity Calibration: a rejection WITH a reason becomes a pending
   // unclassified amendment (no reason → no amendment). Fire-and-forget safe —
   // the reject already committed; generation never throws.
-  await maybeCreateAmendmentFromDraftEvent(rejectEvent);
+  // Reusable preferences are explicitly selected on the training screen.
   return { ok: true };
 }
 
@@ -174,7 +176,7 @@ export async function editItem(pageId: string, newText: string, source: Calibrat
     }
     await writeBody(pageId, newText);
   }
-  const editEvent = await logCalibrationEvent({
+  await logCalibrationEvent({
     source,
     action: "edit",
     objectType: "draft",
@@ -185,10 +187,7 @@ export async function editItem(pageId: string, newText: string, source: Calibrat
     newText,
     rawUserText: newText,
   });
-  // Identity Calibration: a draft edit becomes a pending voice amendment
-  // (proposedText = the new body). Fire-and-forget safe — the edit already
-  // committed; generation never throws.
-  await maybeCreateAmendmentFromDraftEvent(editEvent);
+  // Saving an edit alone does not imply a lasting preference.
   return { ok: true, body: newText };
 }
 

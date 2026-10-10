@@ -2,6 +2,16 @@
 
 The approval + publishing surface for Isaac's content twin (PRD v1.1). Phone-first: review drafts → Approve/Reject/Edit → the app schedules via Typefully → Typefully publishes to X/LinkedIn → the app reconciles status back to Notion. Notion stays the single source of truth; the app holds no primary data.
 
+## Current workflow
+
+Claude routines read the Personal Constitution in Notion and write drafts to its platform databases. The Command Center reads those databases directly; review decisions, edits and survey answers are written back to Notion. You use the app as your interface.
+
+No Hermes runtime or GitHub identity mirror is required. The retired integration routes and worker scripts were removed on 7 October 2026. Historical plans are explicitly marked retired. See [current architecture](docs/current-architecture.md).
+
+## Training
+
+The Train your twin screen captures corrections, applies approved amendments to Notion after a preview, shows routine-reported usage and compares baseline/candidate drafts. See [training loop](docs/training-loop.md).
+
 ## Stack
 
 Next.js 15 (App Router, TypeScript, Tailwind 4) on Vercel. Notion official API (pinned `Notion-Version: 2025-09-03`, data sources era). Typefully API v2. Vercel Cron for publish + reconcile. No database.

@@ -4,7 +4,7 @@
  * reason lands on the CalibrationEvent and (Identity Calibration) becomes a
  * pending, never-auto-applied amendment. Agent API, Bearer AGENT_API_TOKEN.
  *
- * Replay-safe like /api/hermes/decisions: a 409 (already moved off Draft) is
+ * Replay-safe: a 409 (already moved off Draft) is
  * `200 { noop: true, note: "already-decided", status }`.
  */
 

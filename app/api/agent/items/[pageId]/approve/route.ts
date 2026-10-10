@@ -4,7 +4,7 @@
  * Bearer AGENT_API_TOKEN. Never publishes: an Approved item only becomes
  * Queued when the publisher cron (or an explicit /publish-next) picks it up.
  *
- * Replay-safe, same convention as /api/hermes/decisions: a 409 (item already
+ * Replay-safe: a 409 (item already
  * moved off Draft) is `200 { noop: true, note: "already-decided", status }`.
  * Callers must read `status` to see what the item actually is.
  */

@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "./lib/auth";
 
-// /api/cron/, /api/hermes/ and /api/agent/ self-authenticate (Bearer CRON_SECRET /
-// HERMES_API_TOKEN / AGENT_API_TOKEN respectively — see app/api/cron/publish/route.ts and
-// lib/machine-auth.ts) and so are exempt from the human session check below.
-const PUBLIC_PREFIXES = ["/login", "/api/auth/login", "/api/cron/", "/api/hermes/", "/api/agent/"];
+// Cron and Agent API routes authenticate their own bearer tokens.
+const PUBLIC_PREFIXES = ["/login", "/api/auth/login", "/api/cron/", "/api/agent/"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

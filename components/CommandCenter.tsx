@@ -1,296 +1,547 @@
 "use client";
 
-import dynamic from "next/dynamic";
+import { TrainingSection } from "./TrainingSection";
+
+import { PlatformLogo } from "./PlatformLogo";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApprovalQueue } from "./ApprovalQueue";
-import { BootSequence } from "./BootSequence";
 import { CommandPalette, PaletteAction } from "./CommandPalette";
+import { FrameCard } from "./FrameCard";
 import { KpiPanel } from "./KpiPanel";
 import { NovaStage } from "./NovaStage";
+import { NovaCompanion } from "./NovaCompanion";
 import { novaState } from "./novaVoice";
 import { QueuePanel } from "./QueuePanel";
 import { IdentityCalibrationPanel } from "./IdentityCalibrationPanel";
 import { AutomationsPanel, InputsPanel, PositionsPanel } from "./SidePanels";
-import { Ticker } from "./Ticker";
 import { postAction, useApi } from "./useApi";
-import { ContentItem, PanelsData, PlatformKey, QueueData, formatSgt, twinPulse } from "./types";
+import { PanelsData, PlatformKey, QueueData, formatSgt } from "./types";
 
-// The one WebGL liquid-metal moment (liquid-glass plan §3.5) — lazy so the
-// shaders chunk never lands in the main bundle / SSR output.
-const LiquidSigil = dynamic(() => import("./LiquidSigil"), {
-  ssr: false,
-  loading: () => <span style={{ width: 28, height: 28, display: "inline-block" }} />,
-});
+import { TrainingProgressPanel } from "./TrainingProgressPanel";
+import { TrainingEvaluationPanel } from "./TrainingEvaluationPanel";
+import { ApplySuggestionsPanel } from "./ApplySuggestionsPanel";
+
+type View = "review" | "schedule" | "train" | "more";
+const VIEWS: { id: View; label: string; icon: string }[] = [
+  { id: "review", label: "Review", icon: "▤" },
+  { id: "schedule", label: "Schedule", icon: "▦" },
+  { id: "train", label: "Train your twin", icon: "✧" },
+  { id: "more", label: "More", icon: "···" },
+];
 
 export function CommandCenter() {
   const queue = useApi<QueueData>("/api/queue", 60_000);
   const panels = useApi<PanelsData>("/api/panels", 300_000);
+  const [view, setView] = useState<View>("review");
   const [tab, setTab] = useState<PlatformKey | "all">("all");
   const [toasts, setToasts] = useState<{ id: number; message: string }[]>([]);
-
+  const [reviewReset, setReviewReset] = useState(0);
+  const [targetDraft, setTargetDraft] = useState<string | null>(null);
   const toast = useCallback((message: string) => {
     const id = Date.now() + Math.random();
-    setToasts((t) => [...t, { id, message }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 6000);
+    setToasts((t) => [...t.slice(-2), { id, message }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 8000);
   }, []);
-
-  // Optimistic removal from the approval queue, with restore on failure
-  const removeDraft = useCallback(
-    (id: string) => {
-      queue.setData((d) => (d ? { ...d, drafts: d.drafts.filter((x) => x.id !== id) } : d));
-      // Refresh shortly after so Approved/Queued lanes pick the item up
-      setTimeout(() => queue.refresh(), 1500);
-    },
-    [queue]
-  );
-
-  const restoreDraft = useCallback(
-    (_id: string, item: ContentItem, message: string) => {
-      queue.setData((d) =>
-        d && !d.drafts.some((x) => x.id === item.id) ? { ...d, drafts: [item, ...d.drafts] } : d
-      );
-      toast(message);
-    },
-    [queue, toast]
-  );
-
-  const data = queue.data;
-  const failures = panels.data?.publishFailures ?? [];
-
-  // Nova's mood + rotating line, from real pipeline stats
-  const nova = useMemo(() => novaState(data), [data]);
-  const [novaIdx, setNovaIdx] = useState(0);
+  const navigate = (id: View) => {
+    setView(id);
+    window.history.replaceState(null, "", `#${id}`);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  };
   useEffect(() => {
-    setNovaIdx(0);
-    if (nova.lines.length <= 1) return;
-    const id = setInterval(() => setNovaIdx((i) => (i + 1) % nova.lines.length), 14_000);
-    return () => clearInterval(id);
-  }, [nova]);
-
-  const tickerLines = useMemo(() => {
-    const lines: string[] = [];
-    if (!data) return ["ISAAC TWIN // COMMAND CENTER"];
-    if (data.drafts.length > 0) lines.push(`${data.drafts.length} draft${data.drafts.length === 1 ? "" : "s"} awaiting review`);
-    for (const q of data.queued.slice(0, 4)) {
-      lines.push(`${q.platformLabel} post queued — ${formatSgt(q.scheduledAt)}`);
-    }
-    if (data.approved.length > 0) lines.push(`${data.approved.length} approved, awaiting scheduler`);
-    if (data.manual.length > 0) lines.push(`${data.manual.length} item${data.manual.length === 1 ? "" : "s"} ready to post — copy from the queue`);
-    for (const p of data.posted.slice(0, 2)) lines.push(`Posted: ${p.title || p.platformLabel}`);
-    if (failures.length > 0) lines.push(`⚠ ${failures.length} publish failure${failures.length === 1 ? "" : "s"} — check queue`);
-    if (lines.length === 0) lines.push("Systems nominal — queue clear");
-    return lines;
-  }, [data, failures.length]);
-
-  // Command palette actions (PRD §5.3 #3)
-  const visibleDrafts = (data?.drafts ?? []).filter((d) => tab === "all" || d.platform === tab);
-  const topDraft = visibleDrafts[0];
-  const firstApproved = data?.approved?.[0];
-
-  const paletteActions: PaletteAction[] = useMemo(() => {
-    const acts: PaletteAction[] = [];
-    if (topDraft) {
-      acts.push({
-        id: "approve-top",
-        label: `Approve top draft (${topDraft.platformLabel})`,
-        hint: "APPROVE",
-        run: async () => {
-          removeDraft(topDraft.id);
-          twinPulse("approve");
-          const res = await postAction(`/api/items/${topDraft.id}/approve`);
-          if (!res.ok) restoreDraft(topDraft.id, topDraft, res.error ?? "Approve failed");
-        },
-      });
-      acts.push({
-        id: "reject-top",
-        label: `Reject top draft (${topDraft.platformLabel})`,
-        hint: "REJECT",
-        run: async () => {
-          removeDraft(topDraft.id);
-          const res = await postAction(`/api/items/${topDraft.id}/reject`);
-          if (!res.ok) restoreDraft(topDraft.id, topDraft, res.error ?? "Reject failed");
-        },
-      });
-      acts.push({
-        id: "open-top",
-        label: "Open top draft in Notion",
-        hint: "↗",
-        run: () => window.open(topDraft.notionUrl, "_blank"),
-      });
-    }
-    if (firstApproved) {
-      acts.push({
-        id: "publish-next",
-        label: `Publish next slot — ${firstApproved.title || firstApproved.platformLabel}`,
-        hint: "SCHEDULE",
-        run: async () => {
-          const res = await postAction(`/api/items/${firstApproved.id}/publish-next`);
-          if (res.ok) {
-            twinPulse("approve");
-            queue.refresh();
-          } else {
-            twinPulse("error");
-            toast(res.error ?? "Publish failed");
-          }
-        },
-      });
-    }
-    for (const t of ["all", "x", "linkedin", "substack"] as const) {
-      acts.push({
-        id: `tab-${t}`,
-        label: `Show ${t === "all" ? "all platforms" : t}`,
-        hint: "FILTER",
-        run: () => setTab(t),
-      });
-    }
-    acts.push({ id: "refresh", label: "Refresh data", hint: "SYNC", run: () => { queue.refresh(); panels.refresh(); } });
-    acts.push({
-      id: "logout",
-      label: "Log out",
-      run: async () => {
-        await postAction("/api/auth/logout");
-        window.location.href = "/login";
-      },
+    const update = () => {
+      const hash = window.location.hash.slice(1);
+      if (VIEWS.some((v) => v.id === hash)) setView(hash as View);
+    };
+    update();
+    window.addEventListener("hashchange", update);
+    return () => window.removeEventListener("hashchange", update);
+  }, []);
+  useEffect(() => {
+    if (!targetDraft || view !== "review") return;
+    const id = requestAnimationFrame(() => {
+      const el = document.getElementById(`draft-${targetDraft}`);
+      el?.scrollIntoView({ block: "start" });
+      el?.focus({ preventScroll: true });
+      setTargetDraft(null);
     });
-    return acts;
-  }, [topDraft, firstApproved, removeDraft, restoreDraft, queue, panels, toast]);
-
+    return () => cancelAnimationFrame(id);
+  }, [targetDraft, view, tab]);
+  const data = queue.data;
+  const nova = useMemo(() => novaState(data), [data]);
+  const failures = panels.data?.publishFailures ?? [];
+  const refresh = () => {
+    queue.refresh();
+    panels.refresh();
+  };
+  const logout = async () => {
+    const res = await postAction("/api/auth/logout");
+    if (res.ok) window.location.href = "/login";
+    else toast("Could not sign out. Please try again.");
+  };
+  const actions: PaletteAction[] = [
+    ...VIEWS.map((v) => ({
+      id: v.id,
+      label: `Go to ${v.label.toLowerCase()}`,
+      hint: "Navigate",
+      run: () => navigate(v.id),
+    })),
+    ...(data?.drafts ?? []).map((d) => ({
+      id: d.id,
+      label: `${d.platformLabel}: ${d.title || d.body.slice(0, 100)}`,
+      keywords: d.body,
+      hint: "Draft",
+      run: () => {
+        setTab("all");
+        setReviewReset((n) => n + 1);
+        navigate("review");
+        setTargetDraft(d.id);
+      },
+    })),
+    { id: "refresh", label: "Refresh data", hint: "Sync", run: refresh },
+    { id: "logout", label: "Sign out", run: logout },
+  ];
+  const headings = {
+    review: [
+      "Make it sound like you.",
+      "Review your drafts, make a few edits, and send the good ones on their way.",
+    ],
+    schedule: [
+      "Your publishing plan.",
+      "See what’s scheduled, what needs posting, and what’s already out in the world.",
+    ],
+    train: [
+      "A little more you.",
+      "Save feedback to your Personal Constitution in Notion for your Claude routines.",
+    ],
+    more: [
+      "The bigger picture.",
+      "Your performance, knowledge library, and automation settings.",
+    ],
+  };
+  const nav = (mobile = false) => (
+    <nav
+      aria-label={mobile ? "Mobile navigation" : "Main navigation"}
+      className={
+        mobile
+          ? "mobile-navigation fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-hairline bg-white md:hidden"
+          : "hidden items-center gap-1 md:flex"
+      }
+    >
+      {VIEWS.map((v) => (
+        <button
+          key={v.id}
+          onClick={() => navigate(v.id)}
+          aria-current={view === v.id ? "page" : undefined}
+          className={
+            mobile
+              ? `flex min-h-[72px] flex-col items-center justify-center gap-1 px-1 text-xs ${view === v.id ? "bg-oxblood/5 font-semibold text-oxblood" : "text-ink-dim"}`
+              : `btn ${view === v.id ? "bg-white text-oxblood shadow-sm" : "btn-quiet"}`
+          }
+        >
+          {mobile && (
+            <span aria-hidden="true" className="text-xl">
+              {v.icon}
+            </span>
+          )}
+          {v.label}
+          {!mobile && v.id === "review" && data && (
+            <span className="rounded-full bg-oxblood/10 px-2 py-0.5 text-xs text-oxblood">
+              {data.drafts.length}
+            </span>
+          )}
+        </button>
+      ))}
+    </nav>
+  );
   return (
-    <div className="min-h-screen">
-      <BootSequence />
-      <CommandPalette actions={paletteActions} />
-
-      {/* Header */}
-      <header className="glass relative overflow-hidden flex items-center justify-between gap-4 border-b border-hairline px-4 py-3 sm:px-6">
-        <div className="min-w-0">
-          <h1 className="truncate font-sans text-sm font-semibold tracking-wide text-ink sm:text-base">
-            ISAAC TWIN <span className="text-ink-dim">// COMMAND CENTER</span>
-          </h1>
-          <p className="font-mono text-[11px] tracking-[0.12em] text-ink-dim/70">
-            {data ? `SYNCED ${formatSgt(data.fetchedAt)} SGT` : "CONNECTING…"}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <LiquidSigil size={28} />
-          <button
-            type="button"
-            onClick={async () => {
-              await postAction("/api/auth/logout");
-              window.location.href = "/login";
-            }}
-            className="hidden border border-hairline px-3 py-1.5 font-mono text-[11px] tracking-wider text-ink-dim hover:text-ink sm:block"
+    <div className="min-h-screen pb-28 md:pb-8">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-white focus:p-4"
+      >
+        Skip to content
+      </a>
+      <header className="glass command-header relative z-20 border-b border-hairline-faint">
+        <div className="mx-auto flex max-w-[1320px] flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-8">
+          <a
+            href="#review"
+            onClick={() => navigate("review")}
+            className="flex items-center gap-3"
           >
-            LOCK
-          </button>
+            <img
+              src="/icons/diamond-192.png"
+              alt=""
+              width={40}
+              height={40}
+              className="h-10 w-10 shrink-0 rounded-xl"
+            />
+            <span className="text-base font-semibold tracking-tight">
+              Isaac Twin
+              <span className="mt-0.5 hidden sm:block text-xs font-normal text-ink-dim">
+                Your voice, with a little help.
+              </span>
+            </span>
+          </a>
+          {nav()}
+          <div className="flex items-center gap-2">
+            <CommandPalette actions={actions} />
+            <details className="relative">
+              <summary
+                aria-label="Account menu"
+                className="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-full border border-hairline bg-white text-sm font-semibold"
+              >
+                IH
+              </summary>
+              <div className="absolute right-0 top-13 z-40 min-w-40 rounded-xl border border-hairline bg-white p-2 shadow-lg">
+                <button className="btn btn-quiet w-full" onClick={logout}>
+                  Sign out
+                </button>
+              </div>
+            </details>
+          </div>
         </div>
       </header>
-
-      <Ticker lines={tickerLines} />
-
-      {/* Publish failure banner */}
-      {failures.length > 0 && (
-        <div className="border-b border-oxbright/40 bg-oxblood/20 px-4 py-2 sm:px-6">
-          <p className="break-words font-mono text-xs text-ink">
-            ⚠ {failures.length} PUBLISH FAILURE{failures.length === 1 ? "" : "S"} —{" "}
-            {failures[0].platform ?? ""} {failures[0].notes?.slice(0, 80)}
-            {failures[0].itemUrl && (
-              <a href={failures[0].itemUrl} target="_blank" rel="noreferrer" className="ml-2 underline">
-                OPEN ↗
-              </a>
-            )}
-          </p>
+      <main
+        id="main-content"
+        className="mx-auto max-w-[1320px] px-4 py-5 sm:px-8 sm:py-10"
+      >
+        <div className="mb-5 sm:mb-7 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="mb-2 text-sm font-semibold text-oxblood">
+              {VIEWS.find((v) => v.id === view)?.label}
+            </p>
+            <h1 className="font-sans text-3xl font-semibold tracking-tight leading-tight sm:text-5xl">
+              {headings[view][0]}
+            </h1>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-ink-dim sm:text-base">
+              {headings[view][1]}
+            </p>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-ink-dim">
+            <span>
+              {queue.error || data?.warning
+                ? "Sync needs attention"
+                : data
+                  ? `Updated ${formatSgt(data.fetchedAt)} SGT`
+                  : "Connecting…"}
+            </span>
+            <button
+              className="btn btn-secondary"
+              onClick={refresh}
+              disabled={queue.loading}
+            >
+              Refresh
+            </button>
+          </div>
         </div>
-      )}
-
-      {queue.error && (
-        <div className="border-b border-amber/40 bg-amber/10 px-4 py-2 sm:px-6">
-          <p className="break-words font-mono text-xs text-ink">{queue.error}</p>
-        </div>
-      )}
-
-      <main className="mx-auto max-w-[1400px] p-4 sm:p-6">
-        {/* Cockpit: modules left and right, Nova (asking calibration
-            questions one at a time) centre stage. On mobile (<lg) the
-            approval queue — the #1 daily action — sits right under Nova
-            instead of at the very bottom; on lg+ this grid is pixel-identical
-            to the original 3-column layout with the queue full-width below. */}
-        {/* grid-cols-1 (= minmax(0,1fr)) is load-bearing on mobile: without an
-            explicit track, the implicit column auto-sizes to its widest child
-            (the calibration card's max-w-xl) and overflows the viewport. */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_minmax(0,1fr)_300px]">
-          {/* Nova wants to be full-width: edge-to-edge on mobile (breaking out
-              of <main>'s p-4/sm:p-6 via the classic 100vw + -50%/translate
-              full-bleed trick — works regardless of the parent's padding or
-              max-width), and filling the centre grid column (not the whole
-              viewport) on lg+, where the side panels take the outer tracks. */}
-          <section
-            aria-label="Nova"
-            className="relative left-1/2 order-1 flex w-screen -translate-x-1/2 justify-center lg:static lg:order-2 lg:w-full lg:translate-x-0"
+        {(queue.error || data?.warning) && (
+          <div
+            role="alert"
+            className="mb-6 rounded-xl border border-amber/30 bg-amber/10 p-4"
           >
-            <NovaStage mood={nova.mood} idleLine={nova.lines[novaIdx % nova.lines.length]} onToast={toast} />
-          </section>
-
-          {/* Approval queue — mobile: right after Nova. Desktop: full width,
-              below the 3-col row, with an extra lg:mt-2 so the gap above it
-              matches the original 24px (mt-6) spacing exactly (grid gap-4
-              already contributes 16px). */}
-          <div className="order-2 lg:order-4 lg:col-span-3 lg:mt-2">
-            {queue.loading && !data ? (
-              <div className="border border-hairline bg-panel p-8 text-center">
-                <p className="font-mono text-xs tracking-[0.12em] text-ink-dim">LOADING DRAFTS…</p>
+            <p className="font-semibold">
+              {data
+                ? "Some information may be out of date"
+                : "We couldn’t load your drafts"}
+            </p>
+            <p className="mt-1 text-sm">
+              Check your connection and try again.{" "}
+              {data
+                ? "Available items are shown below."
+                : "Your work hasn’t changed."}
+            </p>
+            <details className="mt-2 text-sm">
+              <summary className="cursor-pointer">Connection details</summary>
+              <p className="mt-2 break-words">{queue.error || data?.warning}</p>
+            </details>
+            <button
+              className="btn btn-secondary mt-3"
+              onClick={() => queue.refresh()}
+            >
+              Retry connection
+            </button>
+          </div>
+        )}
+        {failures.length > 0 && (
+          <div
+            role="status"
+            className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-oxblood/20 bg-white p-4"
+          >
+            <p className="text-sm">
+              <strong>
+                {failures.length} publishing issue
+                {failures.length > 1 ? "s" : ""}
+              </strong>{" "}
+              need attention.
+            </p>
+            <button
+              className="btn btn-secondary"
+              onClick={() => navigate("schedule")}
+            >
+              View publishing issues
+            </button>
+          </div>
+        )}
+        {view === "review" && (
+          <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="order-2 min-w-0 lg:order-1">
+              <div className="mb-5 flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Needs your review</h2>
+                {data && (
+                  <span className="text-sm text-ink-dim">
+                    {data.drafts.length} drafts · {data.queued.length} scheduled
+                  </span>
+                )}
               </div>
-            ) : (
-              <ApprovalQueue
-                drafts={data?.drafts ?? []}
-                tab={tab}
-                onTab={setTab}
-                onRemoved={removeDraft}
-                onError={restoreDraft}
-                onToast={toast}
+              {queue.loading && !data ? (
+                <div
+                  role="status"
+                  className="space-y-4 rounded-2xl bg-white p-7"
+                >
+                  <p className="text-sm text-ink-dim">Loading your drafts…</p>
+                  {[1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="h-5 rounded bg-panel motion-safe:animate-pulse"
+                      style={{ width: `${100 - i * 12}%` }}
+                    />
+                  ))}
+                </div>
+              ) : data ? (
+                <ApprovalQueue
+                  key={reviewReset}
+                  drafts={data.drafts}
+                  tab={tab}
+                  onTab={setTab}
+                  incomplete={!!data.warning || !!queue.error}
+                  onRemoved={(id) => {
+                    queue.setData((d) =>
+                      d
+                        ? { ...d, drafts: d.drafts.filter((x) => x.id !== id) }
+                        : d,
+                    );
+                    queue.refresh();
+                  }}
+                  onUpdated={(item) =>
+                    queue.setData((d) =>
+                      d
+                        ? {
+                            ...d,
+                            drafts: d.drafts.map((x) =>
+                              x.id === item.id ? item : x,
+                            ),
+                          }
+                        : d,
+                    )
+                  }
+                  onError={(_id, _item, msg) => toast(msg)}
+                  onToast={toast}
+                />
+              ) : null}
+            </div>
+            <aside className="order-1 space-y-5 lg:order-2 lg:sticky lg:top-6">
+              <NovaCompanion
+                mood={nova.mood}
+                line={
+                  data
+                    ? nova.lines[0]
+                    : "I’ll have your overview ready when the connection is back."
+                }
+                onTrain={() => navigate("train")}
               />
+              <FrameCard className="hidden p-5 lg:block">
+                <h2 className="font-semibold">Coming up</h2>
+                {data ? (
+                  <>
+                    {data.manual.length > 0 && (
+                      <p className="mt-3 rounded-lg bg-amber/10 p-3 text-sm">
+                        {data.manual.length} approved post
+                        {data.manual.length > 1 ? "s" : ""} ready for you to
+                        publish manually.
+                      </p>
+                    )}
+                    {data.queued.slice(0, 3).map((q) => (
+                      <div
+                        key={q.id}
+                        className="mt-4 border-b border-hairline-faint pb-3"
+                      >
+                        <p className="text-sm font-semibold">
+                          {q.title || q.platformLabel}
+                        </p>
+                        <p className="mt-1 flex items-center gap-2 text-xs text-ink-dim">
+                          <PlatformLogo platform={q.platform} />
+                          <span>
+                            {q.platformLabel} · {formatSgt(q.scheduledAt)} SGT
+                          </span>
+                        </p>
+                      </div>
+                    ))}
+                    {data.queued.length === 0 && (
+                      <p className="mt-3 text-sm text-ink-dim">
+                        {data.warning
+                          ? "Schedule information may be incomplete."
+                          : "No posts scheduled yet."}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="mt-3 text-sm text-ink-dim">
+                    Schedule unavailable until connected.
+                  </p>
+                )}
+                <button
+                  className="btn btn-secondary mt-4 w-full"
+                  onClick={() => navigate("schedule")}
+                >
+                  Open schedule →
+                </button>
+              </FrameCard>
+            </aside>
+          </div>
+        )}
+        {view === "schedule" && (
+          <div className="space-y-5">
+            {panels.error && (
+              <div
+                role="alert"
+                className="rounded-xl border border-amber/30 bg-white p-4"
+              >
+                <p className="text-sm">
+                  Publishing health could not be loaded.
+                </p>
+                <button
+                  className="btn btn-secondary mt-2"
+                  onClick={() => panels.refresh()}
+                >
+                  Retry health check
+                </button>
+              </div>
+            )}
+            {failures.length > 0 && (
+              <FrameCard className="p-5">
+                <h2 className="panel-heading">Publishing issues</h2>
+                {failures.map((f) => (
+                  <div
+                    key={f.id}
+                    className="mt-4 border-t border-hairline-faint pt-4"
+                  >
+                    <p className="text-sm font-semibold">
+                      {f.platform || "Publishing"} · {formatSgt(f.at)}
+                    </p>
+                    <p className="mt-2 break-words text-sm text-ink-dim">
+                      {f.notes}
+                    </p>
+                    {f.itemUrl && (
+                      <a
+                        className="btn btn-secondary mt-2"
+                        href={f.itemUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open post in Notion ↗
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </FrameCard>
+            )}
+            {data ? (
+              <QueuePanel
+                approved={data.approved}
+                queued={data.queued}
+                posted={data.posted}
+                manual={data.manual}
+                rejected={data.rejected}
+                index={0}
+                onChanged={() => queue.refresh()}
+                onError={toast}
+              />
+            ) : (
+              !queue.error && <p role="status">Loading schedule…</p>
             )}
           </div>
-
-          <div className="order-3 flex flex-col gap-4 lg:order-1">
-            <QueuePanel
-              approved={data?.approved ?? []}
-              queued={data?.queued ?? []}
-              posted={data?.posted ?? []}
-              manual={data?.manual ?? []}
-              rejected={data?.rejected ?? []}
-              index={1}
-              onChanged={() => queue.refresh()}
-              onError={toast}
-            />
-            <KpiPanel index={2} />
+        )}
+        {view === "train" && (
+          <div className="mx-auto w-full max-w-5xl space-y-3">
+            <p className="mb-5 text-sm leading-relaxed text-ink-dim">Start with Compare writing. Open the other sections when you want to update your views, review suggestions, or check progress.</p>
+            <TrainingSection title="Compare writing" description="Choose which draft sounds more like you. Explain why, and optionally save a preference for future drafts.">
+              <TrainingEvaluationPanel index={0} />
+            </TrainingSection>
+            <TrainingSection title="Share your views" description="Answer Nova’s check-in questions. Your answers go to Notion for the weekly review of your positions.">
+              <FrameCard className="p-5 sm:p-7">
+                <h2 className="panel-heading">Check in with Nova</h2>
+                <NovaStage mood={nova.mood} idleLine="You’re ready for your next check-in." onToast={toast} />
+              </FrameCard>
+            </TrainingSection>
+            <TrainingSection title="Review suggested changes" description="Review proposed changes to your twin’s views and writing rules. Accept what fits or reject what doesn’t.">
+              <IdentityCalibrationPanel index={1} onError={toast} />
+            </TrainingSection>
+            <TrainingSection title="Update your Notion guidance" description="Apply suggestions you’ve already accepted. Preview the exact wording before adding it to your Notion source.">
+              <ApplySuggestionsPanel />
+            </TrainingSection>
+            <TrainingSection title="Progress and past feedback" description="See draft approval rates, check what routines used, and decide which past corrections should become lasting preferences.">
+              <TrainingProgressPanel index={2} />
+            </TrainingSection>
           </div>
-
-          <div className="order-4 flex flex-col gap-4 lg:order-3">
-            <IdentityCalibrationPanel index={3} onError={toast} />
-            <PositionsPanel data={panels.data?.positions} index={4} />
-            <InputsPanel inbox={panels.data?.inbox} wiki={panels.data?.wiki} index={5} />
-            <AutomationsPanel index={6} />
+        )}
+        {view === "more" && (
+          <div className="grid items-start gap-6 lg:grid-cols-2">
+            <KpiPanel index={0} />
+            <div className="space-y-6">
+              {panels.error ? (
+                <FrameCard className="p-5">
+                  <p role="alert">Your library could not be loaded.</p>
+                  <button
+                    className="btn btn-secondary mt-3"
+                    onClick={() => panels.refresh()}
+                  >
+                    Retry library
+                  </button>
+                </FrameCard>
+              ) : (
+                <>
+                  <PositionsPanel data={panels.data?.positions} index={0} />
+                  {panels.data ? (
+                    <InputsPanel
+                      inbox={panels.data.inbox}
+                      wiki={panels.data.wiki}
+                      index={0}
+                    />
+                  ) : (
+                    <p role="status">Loading library…</p>
+                  )}
+                </>
+              )}
+              <AutomationsPanel index={0} />
+            </div>
           </div>
-        </div>
+        )}
       </main>
-
-      {/* Toasts */}
-      <div className="pointer-events-none fixed bottom-4 left-1/2 z-[95] flex w-full max-w-sm -translate-x-1/2 flex-col gap-2 px-4">
+      {nav(true)}
+      <div
+        aria-live="polite"
+        aria-atomic="false"
+        className="pointer-events-none fixed inset-x-0 bottom-24 z-50 mx-auto flex max-w-md flex-col gap-2 px-4 md:bottom-6"
+      >
         {toasts.map((t) => (
           <div
             key={t.id}
-            className="glass pointer-events-auto relative overflow-hidden border border-oxbright/50 px-4 py-2.5 shadow-xl"
+            className="pointer-events-auto flex items-start gap-3 rounded-xl border border-hairline bg-ink p-4 text-sm leading-relaxed text-white shadow-xl"
           >
-            <p className="break-words font-mono text-xs text-ink">{t.message}</p>
+            <p className="flex-1">{t.message}</p>
+            <button
+              aria-label="Dismiss notification"
+              className="-m-2 flex h-11 w-11 items-center justify-center"
+              onClick={() =>
+                setToasts((items) => items.filter((x) => x.id !== t.id))
+              }
+            >
+              ×
+            </button>
           </div>
         ))}
       </div>
-
-      <footer className="px-4 pb-6 text-center sm:px-6">
-        <p className="font-mono text-[11px] leading-relaxed tracking-[0.12em] text-ink-dim/50">
-          ⌘K COMMAND · LONG-PRESS ON MOBILE · NOTION IS THE SOURCE OF TRUTH
-        </p>
-      </footer>
     </div>
   );
 }

@@ -123,7 +123,7 @@ export function platformFromPage(page: NotionPage): PlatformConfig | null {
 export { buildStatusUpdate };
 
 // ---------------------------------------------------------------------------
-// Draft creation bridge (Phase 7 — docs/hermes-calibration-plan.md §4.4)
+// Draft creation for authorised external automation
 //
 // This is the inverse of readItemBody: given a platform + title + body (and
 // optional Hermes provenance fields), create a new Draft-status page in the
@@ -210,7 +210,7 @@ export async function createDraft(input: CreateDraftInput): Promise<CreateDraftR
     throw new DraftInputError(`body exceeds ${MAX_DRAFT_BODY_LENGTH} characters (got ${body.length})`);
   }
 
-  const createdBy = input.createdBy ?? "hermes";
+  const createdBy = input.createdBy ?? "agent";
   const humanizerStatus = input.humanizerStatus ?? "unknown";
   const dsId = dataSourceId(p);
   const schema = await getDataSourceSchema(dsId);
@@ -268,7 +268,7 @@ export async function createDraft(input: CreateDraftInput): Promise<CreateDraftR
 }
 
 // ---------------------------------------------------------------------------
-// Machine-lane helpers shared by /api/hermes/drafts and /api/agent/drafts
+// Draft helpers for /api/agent/drafts
 // ---------------------------------------------------------------------------
 
 export interface PendingDraft {

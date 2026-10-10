@@ -11,14 +11,13 @@
     "migrate": "tsx scripts/migrate.ts",
     "verify:calibration-events": "tsx scripts/verify-calibration-events.ts",
     "verify:proposals": "tsx scripts/verify-proposals.ts",
-    "verify:hermes-export": "tsx scripts/verify-hermes-export.ts",
-    "verify:draft-bridge": "tsx scripts/verify-draft-bridge.ts",
-    "verify:telegram-decisions": "tsx scripts/verify-telegram-decisions.ts",
-    "verify:identity-calibration": "tsx scripts/verify-identity-calibration.ts",
     "verify:agent-api": "tsx scripts/verify-agent-api.ts",
     "verify:typefully": "tsx scripts/verify-typefully.ts",
     "verify:buffer": "tsx scripts/verify-buffer.ts",
-    "export:twin": "tsx scripts/export-twin-context.ts"
+    "test:ui": "playwright test",
+    "typecheck": "tsc --noEmit",
+    "migrate:training": "tsx scripts/migrate-training.ts",
+    "test:training": "tsx scripts/test-training.ts && tsx scripts/test-training-api.ts"
   },
   "dependencies": {
     "@paper-design/shaders-react": "0.0.77",
@@ -29,6 +28,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",

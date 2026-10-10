@@ -47,6 +47,8 @@ export interface CalibrationEvent {
   affectedPositionIds: string[];
   inferredDelta: string;
   status: CalibrationStatus;
+  feedbackScope: "once" | "always" | "unspecified";
+  feedbackReason: string;
 }
 
 export interface LogCalibrationEventInput {
@@ -64,17 +66,18 @@ export interface LogCalibrationEventInput {
   status?: CalibrationStatus;
 }
 
-// Notion rich_text items cap at 2000 chars; richTextValue() chunks automatically,
-// but we truncate the input first (same 1900 convention as lib/calibration.ts)
-// to keep event snapshots bounded and cheap.
-const MAX_FIELD = 1900;
+// Preserve full draft snapshots up to the app input bound. Notion rich_text
+// items are chunked by richTextValue; older rows may contain truncated snapshots.
+const MAX_FIELD = 60000;
 function truncate(text: string | undefined): string {
   return (text ?? "").slice(0, MAX_FIELD);
 }
 
-function pageToEvent(page: Json): CalibrationEvent {
+export function pageToEvent(page: Json): CalibrationEvent {
   const affectedRaw = readRichTextProp(page, "Affected Position IDs");
   return {
+    feedbackScope: (readSelectProp(page, "Feedback Scope") as CalibrationEvent["feedbackScope"]) || "unspecified",
+    feedbackReason: readRichTextProp(page, "Feedback Reason"),
     id: page.id,
     createdAt: page.created_time,
     source: (readSelectProp(page, "Source") as CalibrationSource) ?? "command_center",
