@@ -10,7 +10,7 @@
 
 import { NextRequest } from "next/server";
 import { agentJson, agentRoute, methodNotAllowed } from "@/lib/agent-api";
-import { PLATFORMS, TYPEFULLY_ENABLED } from "@/lib/config";
+import { PLATFORMS, PUBLISHER_MODE } from "@/lib/config";
 import { ContentItem } from "@/lib/items";
 import { publishFailures24h } from "@/lib/kpis";
 import { queryProposals } from "@/lib/proposals";
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
         rejected: queue.rejected.map(summary),
       },
       publisher: {
-        mode: TYPEFULLY_ENABLED ? "typefully" : "manual",
+        mode: PUBLISHER_MODE, // "typefully" | "buffer" | "manual"
         autoPlatforms: PLATFORMS.filter((p) => p.autoPublish).map((p) => p.key),
         failures24h,
       },

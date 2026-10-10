@@ -136,7 +136,7 @@ async function live(token: string) {
     "state.lanes has approved/queued/posted/manual/rejected arrays",
     ["approved", "queued", "posted", "manual", "rejected"].every((k) => Array.isArray(sb.lanes?.[k]))
   );
-  assert("state.publisher has mode/autoPlatforms/failures24h", ["typefully", "manual"].includes(sb.publisher?.mode) && Array.isArray(sb.publisher?.autoPlatforms) && typeof sb.publisher?.failures24h === "number");
+  assert("state.publisher has mode/autoPlatforms/failures24h", ["typefully", "buffer", "manual"].includes(sb.publisher?.mode) && Array.isArray(sb.publisher?.autoPlatforms) && typeof sb.publisher?.failures24h === "number");
   assert("state.proposals.pending is number", typeof sb.proposals?.pending === "number");
   assert("state.warnings is array", Array.isArray(sb.warnings));
   assert("state leaks no token-ish keys", !/token|secret|apikey|api_key|password|passphrase/i.test(Object.keys(flatten(sb)).join(" ")));

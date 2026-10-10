@@ -4,7 +4,7 @@ export interface PlatformConfig {
   key: PlatformKey;
   label: string;
   dsEnv: string;
-  /** Typefully auto-publishes these; IG platforms go to the manual lane. */
+  /** The active publishing engine (Typefully or Buffer) auto-publishes these; IG platforms go to the manual lane. */
   autoPublish: boolean;
   /** Body lives in page content (blocks), not a property. */
   bodyInPageContent: boolean;
@@ -20,8 +20,29 @@ export interface PlatformConfig {
  * Setting a Typefully key re-enables zero-touch publishing, scoped to the
  * platforms listed in TYPEFULLY_PLATFORMS (default X only — LinkedIn stays
  * manual until Isaac explicitly opts it in).
+ *
+ * Buffer is a second engine (lib/buffer.ts, selected via lib/publish-engine.ts).
+ * PUBLISH_ENGINE picks which engine creates NEW posts (default "typefully" —
+ * with it unset, every flag below resolves exactly as it did before Buffer
+ * existed). With PUBLISH_ENGINE=buffer, a platform auto-publishes when
+ * BUFFER_ACCESS_TOKEN and that platform's BUFFER_CHANNEL_* id are both set
+ * (the channel id is the per-platform opt-in; TYPEFULLY_PLATFORMS is ignored).
+ * PUBLISH_MODE=manual trumps everything.
  */
 export const TYPEFULLY_ENABLED = !!process.env.TYPEFULLY_API_KEY && process.env.PUBLISH_MODE !== "manual";
+
+export type PublishEngineKey = "typefully" | "buffer";
+
+/**
+ * Pure PUBLISH_ENGINE parser: unset/blank → "typefully"; a valid name (any
+ * case) → that engine; anything else → null (invalid). Callers fail closed on
+ * null — config treats it as manual, engineForNewPosts() throws.
+ */
+export function parsePublishEngine(raw: string | undefined): PublishEngineKey | null {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (v === "") return "typefully";
+  return v === "typefully" || v === "buffer" ? v : null;
+}
 
 /** Pure so verify scripts can exercise the parsing without mutating process.env. */
 export function parseTypefullyPlatforms(raw: string | undefined): Set<string> {
@@ -36,23 +57,90 @@ export function parseTypefullyPlatforms(raw: string | undefined): Set<string> {
 
 export const TYPEFULLY_PLATFORMS = parseTypefullyPlatforms(process.env.TYPEFULLY_PLATFORMS);
 
+/** Notion-stored id prefix marking a Buffer post in the "Typefully ID" property (see lib/publish-engine.ts). */
+export const BUFFER_ID_PREFIX = "buffer:";
+
+/** Per-platform Buffer channel id env vars (Buffer schedules per connected channel, unlike Typefully's social set). */
+export const BUFFER_CHANNEL_ENVS: Partial<Record<PlatformKey, string>> = {
+  x: "BUFFER_CHANNEL_X",
+  linkedin: "BUFFER_CHANNEL_LINKEDIN",
+  substack: "BUFFER_CHANNEL_SUBSTACK",
+};
+
+type EnvLike = Record<string, string | undefined>;
+
+function bufferReady(key: string, env: EnvLike): boolean {
+  const channelEnv = BUFFER_CHANNEL_ENVS[key as PlatformKey];
+  return env.PUBLISH_MODE !== "manual" && !!env.BUFFER_ACCESS_TOKEN && !!channelEnv && !!env[channelEnv];
+}
+
+function typefullyReady(key: string, env: EnvLike): boolean {
+  return (
+    !!env.TYPEFULLY_API_KEY && env.PUBLISH_MODE !== "manual" && parseTypefullyPlatforms(env.TYPEFULLY_PLATFORMS).has(key)
+  );
+}
+
+/**
+ * Can the publisher CREATE new scheduled posts for this platform? Pure over
+ * `env` so verify scripts can test the engine × env matrix. IG platforms are
+ * hardcoded manual in ALL_PLATFORMS and never reach this.
+ */
+export function computeAutoPublish(key: string, env: EnvLike = process.env): boolean {
+  const engine = parsePublishEngine(env.PUBLISH_ENGINE);
+  if (engine === "typefully") return typefullyReady(key, env);
+  if (engine === "buffer") return bufferReady(key, env);
+  return false; // invalid PUBLISH_ENGINE → fail closed to manual
+}
+
+/**
+ * Should the reconciler look at this platform's Queued items? Superset of
+ * autoPublish: after an engine flip, items queued through the OTHER engine
+ * (Typefully ids un-prefixed, Buffer ids `buffer:`-prefixed) must still be
+ * reconciled to Posted, so a platform reconciles when EITHER engine is usable
+ * for it. With no Buffer env set this equals computeAutoPublish exactly.
+ */
+export function computeReconciles(key: string, env: EnvLike = process.env): boolean {
+  if (env.PUBLISH_MODE === "manual") return false;
+  return computeAutoPublish(key, env) || typefullyReady(key, env) || bufferReady(key, env);
+}
+
+/** What the hermes export / agent state report as publisher.mode. Pure over `env`. */
+export function computePublisherMode(env: EnvLike = process.env): "typefully" | "buffer" | "manual" {
+  if (env.PUBLISH_MODE === "manual") return "manual";
+  const engine = parsePublishEngine(env.PUBLISH_ENGINE);
+  if (engine === "typefully") return env.TYPEFULLY_API_KEY ? "typefully" : "manual";
+  if (engine === "buffer") {
+    const anyChannel = Object.values(BUFFER_CHANNEL_ENVS).some((name) => !!name && !!env[name]);
+    return env.BUFFER_ACCESS_TOKEN && anyChannel ? "buffer" : "manual";
+  }
+  return "manual";
+}
+
+/** Honest publisher mode for the machine-lane state endpoints: "typefully" | "buffer" | "manual". */
+export const PUBLISHER_MODE = computePublisherMode();
+
+/** Reconciler platform gate — see computeReconciles. */
+export function platformReconciles(p: PlatformConfig): boolean {
+  return p.autoPublish || (p.key !== "ig-story" && p.key !== "ig-carousel" && computeReconciles(p.key));
+}
+
 export const ALL_PLATFORMS: PlatformConfig[] = [
-  { key: "x", label: "X", dsEnv: "DS_X", autoPublish: TYPEFULLY_ENABLED && TYPEFULLY_PLATFORMS.has("x"), bodyInPageContent: true },
+  { key: "x", label: "X", dsEnv: "DS_X", autoPublish: computeAutoPublish("x"), bodyInPageContent: true },
   {
     key: "linkedin",
     label: "LinkedIn",
     dsEnv: "DS_LINKEDIN",
-    autoPublish: TYPEFULLY_ENABLED && TYPEFULLY_PLATFORMS.has("linkedin"),
+    autoPublish: computeAutoPublish("linkedin"),
     bodyInPageContent: true,
   },
   {
     // Substack Notes. Observation-only notes mined from the Larger back
-    // catalogue on rotation; Typefully v2 exposes these as the `substack`
-    // platform. Body lives in page content, same convention as X/LinkedIn.
+    // catalogue on rotation; Typefully v2 and Buffer both expose these as the
+    // `substack` platform/service. Body lives in page content, same convention as X/LinkedIn.
     key: "substack",
     label: "Substack",
     dsEnv: "DS_SUBSTACK_NOTES",
-    autoPublish: TYPEFULLY_ENABLED && TYPEFULLY_PLATFORMS.has("substack"),
+    autoPublish: computeAutoPublish("substack"),
     bodyInPageContent: true,
   },
   {

@@ -17,6 +17,7 @@
     "verify:identity-calibration": "tsx scripts/verify-identity-calibration.ts",
     "verify:agent-api": "tsx scripts/verify-agent-api.ts",
     "verify:typefully": "tsx scripts/verify-typefully.ts",
+    "verify:buffer": "tsx scripts/verify-buffer.ts",
     "export:twin": "tsx scripts/export-twin-context.ts"
   },
   "dependencies": {

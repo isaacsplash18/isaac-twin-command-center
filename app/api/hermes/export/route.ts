@@ -7,8 +7,9 @@
  *
  * Response shape is documented in docs/hermes-integration.md and considered
  * stable; a breaking change bumps `version`. No secrets are ever included —
- * `publisher.mode` is derived from whether TYPEFULLY_API_KEY is set, the key
- * itself is never returned.
+ * `publisher.mode` ("typefully" | "buffer" | "manual") is derived from which
+ * engine's credentials are set (see computePublisherMode in lib/config.ts);
+ * no key or token is ever returned.
  *
  * Degrades gracefully: any unconfigured lane (DS_CALIBRATION_EVENTS,
  * DS_PROPOSALS, or a content platform's DS env var) returns an empty
@@ -20,7 +21,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isMachineAuthorized } from "@/lib/machine-auth";
 import { queryCalibrationEvents } from "@/lib/calibration-events";
 import { queryProposals } from "@/lib/proposals";
-import { PLATFORMS, TYPEFULLY_ENABLED } from "@/lib/config";
+import { PLATFORMS, PUBLISHER_MODE } from "@/lib/config";
 import { itemsWithStatus } from "@/lib/items";
 import { publishFailures24h } from "@/lib/kpis";
 
@@ -115,7 +116,7 @@ export async function GET(req: NextRequest) {
       proposals: { pending, accepted },
       drafts: { pendingReview },
       publisher: {
-        mode: TYPEFULLY_ENABLED ? "typefully" : "manual",
+        mode: PUBLISHER_MODE, // "typefully" | "buffer" | "manual"
         failures24h,
         autoPlatforms: PLATFORMS.filter((p) => p.autoPublish).map((p) => p.key),
       },

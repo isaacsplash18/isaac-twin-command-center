@@ -4,16 +4,21 @@
  *
  * Safety rails:
  *  - Only ever touches items whose status is exactly "Approved"/"Queued".
- *  - Idempotent: items that already carry a Typefully ID are skipped.
- *  - On Typefully failure the item stays Approved and a Publish-failed
+ *  - Idempotent: items that already carry a Typefully ID are skipped. (The
+ *    "Typefully ID" property holds an engine-tagged id: Buffer posts are
+ *    `buffer:<id>`, anything un-prefixed is Typefully — see lib/publish-engine.ts.)
+ *  - On engine failure the item stays Approved and a Publish-failed
  *    event is logged.
+ *  - Engine-agnostic: NEW posts go through engineForNewPosts() (PUBLISH_ENGINE,
+ *    default Typefully); the reconciler and rollback route PER ITEM via the
+ *    stored id, so a queue that mixes engines mid-cutover keeps working.
  */
 
-import { PLATFORMS, PLATFORM_EVENT_NAMES, PlatformConfig, dataSourceId } from "./config";
+import { PLATFORMS, PLATFORM_EVENT_NAMES, PlatformConfig, dataSourceId, platformReconciles } from "./config";
 import { itemsWithStatus, buildStatusUpdate, ContentItem } from "./items";
 import { getPage, logEvent, queryDataSource, readBody, readDateProp, readRichTextProp, readStatus, richTextValue, updatePage } from "./notion";
 import { nextFreeSlot, SchedulablePlatform } from "./scheduling";
-import { createScheduledDraft, deleteDraft, getDraftState } from "./typefully";
+import { ENGINE_LABEL, engineForNewPosts, parseStoredId, toStoredId } from "./publish-engine";
 import { platformFromPage } from "./items";
 import { ActionError } from "./actions";
 
@@ -37,11 +42,16 @@ async function scheduleOne(
   const body = item.body || (await readBody(item.id)) || item.title;
   if (!body.trim()) throw new Error("Empty draft body");
   const slot = nextFreeSlot(p.key as SchedulablePlatform, now, taken);
-  const draft = await createScheduledDraft({
+  const engine = engineForNewPosts();
+  const label = ENGINE_LABEL[engine.key];
+  const noun = engine.key === "typefully" ? "draft" : "post";
+  const created = await engine.createScheduledPost({
     platform: p.key as SchedulablePlatform,
     body,
     publishAtIso: slot,
   });
+  // Engine-tagged id as stored in Notion ("buffer:<id>" for Buffer, raw for Typefully).
+  const draft = { id: toStoredId(engine.key, created.id) };
   try {
     await updatePage(item.id, {
       ...(await buildStatusUpdate(dataSourceId(p), "Queued")),
@@ -49,15 +59,15 @@ async function scheduleOne(
       "Scheduled At": { date: { start: slot } },
     });
   } catch (err) {
-    // The Typefully draft was created but Notion never recorded its ID, so
+    // The engine post was created but Notion never recorded its ID, so
     // the idempotency guard (runPublisher skips items that already carry a
     // Typefully ID) can't see it — the next run would create a SECOND draft
-    // and double-schedule the post. Roll the Typefully side back so the item
+    // and double-schedule the post. Roll the engine side back so the item
     // stays cleanly Approved and can be retried.
     try {
-      await deleteDraft(draft.id);
+      await engine.deletePost(created.id);
     } catch (rollbackErr) {
-      // Rollback failed too: the draft is now orphaned in Typefully with no
+      // Rollback failed too: the draft is now orphaned in the engine with no
       // Notion pointer. Record its id in a Publish-failed event so the
       // reconciler/human can find and remove it, then rethrow.
       const notionMsg = err instanceof Error ? err.message : String(err);
@@ -66,7 +76,7 @@ async function scheduleOne(
         event: "Publish-failed",
         platform: PLATFORM_EVENT_NAMES[p.key],
         itemUrl: item.notionUrl,
-        notes: `ORPHANED Typefully draft ${draft.id} — Notion write failed after create and rollback (deleteDraft) also failed; remove it manually. Notion error: ${notionMsg}; rollback error: ${rollbackMsg}`,
+        notes: `ORPHANED ${label} ${noun} ${draft.id} — Notion write failed after create and rollback (${engine.key === "typefully" ? "deleteDraft" : "deletePost"}) also failed; remove it manually. Notion error: ${notionMsg}; rollback error: ${rollbackMsg}`,
       }).catch(() => {});
       throw err;
     }
@@ -76,7 +86,7 @@ async function scheduleOne(
     event: "Queued",
     platform: PLATFORM_EVENT_NAMES[p.key],
     itemUrl: item.notionUrl,
-    notes: `Typefully draft ${draft.id}, slot ${slot}`,
+    notes: `${label} ${noun} ${draft.id}, slot ${slot}`,
   });
   return { slot, typefullyId: draft.id };
 }
@@ -99,7 +109,7 @@ export async function runPublisher(): Promise<PublishResult> {
     for (const item of approved) {
       if (item.typefullyId) {
         result.skipped++;
-        continue; // idempotency: already sent to Typefully on a previous run
+        continue; // idempotency: already sent to an engine (Typefully or Buffer) on a previous run
       }
       try {
         const { slot, typefullyId } = await scheduleOne(p, item, taken, now);
@@ -129,7 +139,8 @@ export async function publishOne(pageId: string): Promise<{ slot: string; typefu
   if (!p) throw new ActionError("Page does not belong to a configured content database", 400);
   if (!p.autoPublish) throw new ActionError("IG items are posted manually", 400);
   if (readStatus(page) !== "Approved") throw new ActionError("Only Approved items can be published");
-  if (readRichTextProp(page, "Typefully ID")) throw new ActionError("Item is already in Typefully");
+  const existingId = readRichTextProp(page, "Typefully ID");
+  if (existingId) throw new ActionError(`Item is already in ${ENGINE_LABEL[parseStoredId(existingId).engine.key]}`);
   const item = {
     id: page.id,
     notionUrl: page.url,
@@ -173,7 +184,8 @@ export async function runReconciler(): Promise<ReconcileResult> {
   const now = Date.now();
   const result: ReconcileResult = { posted: [], late: [], checked: 0 };
 
-  for (const p of PLATFORMS.filter((p) => p.autoPublish)) {
+  // platformReconciles ⊇ autoPublish: Queued items from the OTHER engine still reconcile after a flip.
+  for (const p of PLATFORMS.filter((p) => platformReconciles(p))) {
     let queued: ContentItem[];
     try {
       queued = await itemsWithStatus(p, "Queued");
@@ -184,11 +196,14 @@ export async function runReconciler(): Promise<ReconcileResult> {
       if (!item.scheduledAt || new Date(item.scheduledAt).getTime() > now) continue;
       if (!item.typefullyId) continue;
       result.checked++;
+      // Route per item by its stored id — Typefully items stay on Typefully even if PUBLISH_ENGINE=buffer.
+      const { engine, id: rawId } = parseStoredId(item.typefullyId);
+      const label = ENGINE_LABEL[engine.key];
       let state;
       try {
-        state = await getDraftState(item.typefullyId);
+        state = await engine.getPostState(rawId);
       } catch (err) {
-        console.error(`Reconciler: Typefully lookup failed for ${item.typefullyId}:`, err);
+        console.error(`Reconciler: ${label} lookup failed for ${item.typefullyId}:`, err);
         continue;
       }
       if (state.status === "published") {
@@ -211,8 +226,8 @@ export async function runReconciler(): Promise<ReconcileResult> {
             itemUrl: item.notionUrl,
             notes:
               state.status === "error"
-                ? "Typefully reports publish error"
-                : `Still unpublished >2h past slot (Typefully status: ${state.status})`,
+                ? `${label} reports publish error`
+                : `Still unpublished >2h past slot (${label} status: ${state.status})`,
           });
         }
         result.late.push(item.id);

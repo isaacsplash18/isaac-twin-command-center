@@ -7,6 +7,7 @@
  */
 
 import { requiredEnv } from "./config";
+import type { PublishEngine } from "./publish-engine";
 
 const BASE = "https://api.typefully.com";
 
@@ -129,3 +130,15 @@ export async function deleteDraft(draftId: string): Promise<void> {
 export function typefullyDraftUrl(draftId: string): string {
   return `https://typefully.com/?d=${draftId}`;
 }
+
+/**
+ * Typefully as a PublishEngine (lib/publish-engine.ts). A thin pass-through —
+ * the functions above are unchanged and still exported for the verify script.
+ * Ids are Typefully draft ids, stored un-prefixed in Notion.
+ */
+export const typefullyEngine: PublishEngine = {
+  key: "typefully",
+  createScheduledPost: (opts) => createScheduledDraft(opts),
+  getPostState: (id) => getDraftState(id),
+  deletePost: (id) => deleteDraft(id),
+};

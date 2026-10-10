@@ -210,18 +210,20 @@ export async function markPostedItem(pageId: string) {
   return { ok: true };
 }
 
-/** Delete the Typefully draft and put the item back into the Approved pool. */
+/** Delete the engine's scheduled post (Typefully draft or Buffer post, routed by stored id) and put the item back into the Approved pool. */
 export async function unqueueItem(pageId: string) {
   const { page, p } = await loadItem(pageId);
   const status = readStatus(page);
   if (status !== "Queued") throw new ActionError(`Cannot unqueue an item with status "${status ?? "unknown"}"`);
   const typefullyId = readRichTextProp(page, "Typefully ID");
   if (typefullyId) {
-    const { deleteDraft } = await import("./typefully");
+    const { parseStoredId } = await import("./publish-engine");
+    const { engine, id: rawId } = parseStoredId(typefullyId);
     try {
-      await deleteDraft(typefullyId);
+      await engine.deletePost(rawId);
     } catch (err) {
       // A 404 means the draft is already gone in Typefully — safe to proceed.
+      // (The Buffer engine's deletePost already treats NOT_FOUND as success.)
       if (!(err instanceof Error && err.message.includes("404"))) throw err;
     }
   }

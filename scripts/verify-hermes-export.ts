@@ -159,8 +159,8 @@ async function main() {
   assert("drafts.pendingReview is number", typeof body.drafts?.pendingReview === "number");
   assert("publisher is object", !!body.publisher && typeof body.publisher === "object");
   assert(
-    "publisher.mode is manual/typefully",
-    body.publisher?.mode === "manual" || body.publisher?.mode === "typefully"
+    "publisher.mode is manual/typefully/buffer",
+    body.publisher?.mode === "manual" || body.publisher?.mode === "typefully" || body.publisher?.mode === "buffer"
   );
   assert("warnings is array", Array.isArray(body.warnings));
   assert("warnings entries are strings", (body.warnings ?? []).every((w: unknown) => typeof w === "string"));
