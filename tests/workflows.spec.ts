@@ -24,6 +24,72 @@ const sample = (id: string, autoPublish = true) => ({
   typefullyId: null,
   inCanva: false,
 });
+const mapFixture = {
+  nodes: [
+    { id: "domain:AI & work", kind: "domain", label: "AI & work", members: 3 },
+    { id: "domain:Singapore", kind: "domain", label: "Singapore", members: 2 },
+    {
+      id: "pos-1",
+      kind: "position",
+      label: "Tools should widen who gets to build",
+      confidence: "Confirmed",
+      status: "Active",
+      domains: ["AI & work"],
+      nuance: "",
+      basis: "",
+      question: "",
+      lastValidated: "2026-10-01",
+      url: "https://www.notion.so/pos-1",
+    },
+    {
+      id: "pos-2",
+      kind: "position",
+      label: "Credentials matter less each year",
+      confidence: "Predicted",
+      status: "Active",
+      domains: ["AI & work", "Singapore"],
+      nuance: "",
+      basis: "",
+      question: "",
+      lastValidated: null,
+      url: "https://www.notion.so/pos-2",
+    },
+    {
+      id: "pos-3",
+      kind: "position",
+      label: "Automation dividends should be shared",
+      confidence: "Contested",
+      status: "Needs validation",
+      domains: ["Singapore"],
+      nuance: "",
+      basis: "",
+      question: "",
+      lastValidated: null,
+      url: "https://www.notion.so/pos-3",
+    },
+    {
+      id: "wiki-1",
+      kind: "corpus",
+      label: "The pin factory",
+      nodeType: "Idea",
+      maturity: "Growing",
+      domains: ["AI & work"],
+      summary: "Specialisation as a double-edged gift.",
+      url: "https://www.notion.so/wiki-1",
+      recurrence: 2,
+    },
+  ],
+  links: [
+    { source: "pos-1", target: "domain:AI & work", kind: "domain" },
+    { source: "pos-2", target: "domain:AI & work", kind: "domain" },
+    { source: "pos-2", target: "domain:Singapore", kind: "domain" },
+    { source: "pos-3", target: "domain:Singapore", kind: "domain" },
+    { source: "wiki-1", target: "domain:AI & work", kind: "domain" },
+    { source: "wiki-1", target: "pos-1", kind: "evidence" },
+  ],
+  counts: { domains: 2, positions: 3, corpus: 1, captures: 0 },
+  fetchedAt: "2026-10-06T03:20:00Z",
+};
 async function setup(
   page: Page,
   opts: {
@@ -87,6 +153,7 @@ async function setup(
         wiki: [],
         publishFailures: [],
       };
+    else if (url.pathname === "/api/map") body = mapFixture;
     else if (url.pathname === "/api/calibration")
       body = { questions: [], pageUrl: "", roundIntro: "" };
     else if (url.pathname === "/api/proposals") body = { proposals: [] };
@@ -141,7 +208,9 @@ test("desktop review leads, navigation works, and search finds body text", async
   await expect(
     page.getByRole("heading", { name: "Needs your review" }),
   ).toBeVisible();
-  await expect(page.locator("video")).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Nova companion and constitution map" }),
+  ).toBeVisible();
   const bounds = await page.getByRole("article").first().boundingBox();
   expect(bounds!.y).toBeLessThan(600);
   await page.getByRole("button", { name: /Search & commands/ }).click();
@@ -155,16 +224,11 @@ test("desktop review leads, navigation works, and search finds body text", async
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).not.toBeVisible();
-  for (const name of ["Schedule", "Train your twin", "More", "Review"])
+  for (const name of ["Schedule", "Train your twin", "Map", "More", "Review"])
     await page
       .getByRole("navigation", { name: "Main navigation", exact: true })
       .getByRole("button", { name, exact: name !== "Review" })
       .click();
-  await expect
-    .poll(() =>
-      page.locator("video").evaluate((v: HTMLVideoElement) => v.readyState),
-    )
-    .toBeGreaterThan(1);
   await page.screenshot({
     path: "test-results/review-desktop.png",
     fullPage: true,
@@ -198,6 +262,21 @@ test("mobile navigation fits and no hidden gesture is needed", async ({
   await page.getByRole("button", { name: /Search & commands/ }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.getByRole("button", { name: "Close search" }).click();
+  await page
+    .getByRole("navigation", { name: "Mobile navigation" })
+    .getByRole("button", { name: "Map", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Your constitution, mapped." }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Reset view", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
 });
 
 test("approval communicates the actual publishing mode", async ({ page }) => {
@@ -347,34 +426,58 @@ test("saving changes keeps the updated draft in review", async ({ page }) => {
   expect(mutations.map((m) => m.path)).toEqual(["/api/items/one/edit"]);
 });
 
-test("hologram is visible by default and can be paused", async ({ page }) => {
+test("constitution map card renders and opens the map view", async ({
+  page,
+}) => {
   await setup(page);
-  const video = page.locator("video");
-  await expect(video).toBeVisible();
-  await expect
-    .poll(() => video.evaluate((v: HTMLVideoElement) => v.readyState))
-    .toBeGreaterThan(1);
-  await page.getByRole("button", { name: "Pause motion" }).click();
-  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
-  const pausedTimes = await video.evaluate(async (v: HTMLVideoElement) => {
-    const before = v.currentTime;
-    await new Promise(requestAnimationFrame);
-    await new Promise(requestAnimationFrame);
-    return [before, v.currentTime];
+  const card = page.getByRole("region", {
+    name: "Nova companion and constitution map",
   });
-  expect(pausedTimes[1]).toBe(pausedTimes[0]);
+  await expect(card.getByText("NOVA / CONSTITUTION")).toBeVisible();
+  await expect(card.locator("canvas")).toBeVisible();
+  await card.getByRole("button", { name: /Explore the map/ }).click();
   await expect(
-    page.getByRole("button", { name: "Resume motion" }),
-  ).toHaveAttribute("aria-pressed", "true");
+    page.getByRole("heading", { name: "Your constitution, mapped." }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/#map$/);
+  const map = page.getByRole("region", { name: "Constitution map" });
+  await expect(
+    map.getByText("3 positions · 1 corpus · 2 domains"),
+  ).toBeVisible();
+  await expect(map.locator("canvas")).toBeVisible();
+  await expect(map.getByText("Contested", { exact: true }).first()).toBeVisible();
+  const sources = map.getByRole("button", { name: "Sources", exact: true });
+  await expect(sources).toHaveAttribute("aria-pressed", "true");
+  await sources.click();
+  await expect(sources).toHaveAttribute("aria-pressed", "false");
+  await expect(
+    map.getByRole("button", { name: "Reset view", exact: true }),
+  ).toBeEnabled();
 });
 
-test("hologram respects reduced motion", async ({ page }) => {
+test("map card motion can be paused and resumed", async ({ page }) => {
+  await setup(page);
+  const card = page.getByRole("region", {
+    name: "Nova companion and constitution map",
+  });
+  await expect(card.locator("canvas")).toBeVisible();
+  await card.getByRole("button", { name: "Pause motion" }).click();
+  const resume = card.getByRole("button", { name: "Resume motion" });
+  await expect(resume).toHaveAttribute("aria-pressed", "true");
+  await resume.click();
+  await expect(
+    card.getByRole("button", { name: "Pause motion" }),
+  ).toHaveAttribute("aria-pressed", "false");
+});
+
+test("map card respects reduced motion", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await setup(page);
-  await expect(page.locator("video")).toBeVisible();
-  await expect
-    .poll(() =>
-      page.locator("video").evaluate((v: HTMLVideoElement) => v.paused),
-    )
-    .toBe(true);
+  const card = page.getByRole("region", {
+    name: "Nova companion and constitution map",
+  });
+  await expect(card.getByText("Reduced motion")).toBeVisible();
+  await expect(
+    card.getByRole("button", { name: /Pause motion|Resume motion/ }),
+  ).toHaveCount(0);
 });

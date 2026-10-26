@@ -82,6 +82,47 @@ export interface PanelsData {
   }[];
 }
 
+export type MapNodeKind = "domain" | "position" | "corpus" | "capture";
+
+export interface MapNode {
+  id: string;
+  kind: MapNodeKind;
+  label: string;
+  domains?: string[];
+  url?: string;
+  /** Domain hubs */
+  members?: number;
+  /** Positions */
+  confidence?: string | null;
+  status?: string | null;
+  nuance?: string;
+  basis?: string;
+  question?: string;
+  lastValidated?: string | null;
+  /** Corpus */
+  nodeType?: string | null;
+  maturity?: string | null;
+  summary?: string;
+  recurrence?: number | null;
+  /** Captures */
+  type?: string | null;
+  note?: string;
+  sourceUrl?: string | null;
+}
+
+export interface MapLink {
+  source: string;
+  target: string;
+  kind: "domain" | "evidence";
+}
+
+export interface MapData {
+  nodes: MapNode[];
+  links: MapLink[];
+  counts: { domains: number; positions: number; corpus: number; captures: number };
+  fetchedAt: string;
+}
+
 export const PLATFORM_TABS: { key: PlatformKey | "all"; label: string }[] = [
   { key: "all", label: "All platforms" },
   { key: "x", label: "X" },

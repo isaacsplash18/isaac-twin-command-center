@@ -4,8 +4,9 @@ import { TrainingSection } from "./TrainingSection";
 
 import { PlatformLogo } from "./PlatformLogo";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { ApprovalQueue } from "./ApprovalQueue";
+import { ConstitutionMap } from "./ConstitutionMap";
 import { CommandPalette, PaletteAction } from "./CommandPalette";
 import { FrameCard } from "./FrameCard";
 import { KpiPanel } from "./KpiPanel";
@@ -22,13 +23,51 @@ import { TrainingProgressPanel } from "./TrainingProgressPanel";
 import { TrainingEvaluationPanel } from "./TrainingEvaluationPanel";
 import { ApplySuggestionsPanel } from "./ApplySuggestionsPanel";
 
-type View = "review" | "schedule" | "train" | "more";
-const VIEWS: { id: View; label: string; icon: string }[] = [
-  { id: "review", label: "Review", icon: "▤" },
-  { id: "schedule", label: "Schedule", icon: "▦" },
-  { id: "train", label: "Train your twin", icon: "✧" },
-  { id: "more", label: "More", icon: "···" },
+type View = "review" | "schedule" | "train" | "map" | "more";
+const VIEWS: { id: View; label: string; short: string }[] = [
+  { id: "review", label: "Review", short: "Review" },
+  { id: "schedule", label: "Schedule", short: "Schedule" },
+  { id: "train", label: "Train your twin", short: "Train" },
+  { id: "map", label: "Map", short: "Map" },
+  { id: "more", label: "More", short: "More" },
 ];
+
+// Inline line icons for the mobile bar: text glyphs rendered inconsistently across devices.
+const VIEW_ICONS: Record<View, ReactNode> = {
+  review: (
+    <>
+      <path d="M10 6.5h10M10 12h10M10 17.5h10" />
+      <path d="M3.5 6.5 5 8l2.5-3M3.5 12 5 13.5l2.5-3M3.5 17.5 5 19l2.5-3" />
+    </>
+  ),
+  schedule: (
+    <>
+      <rect x="3.5" y="5" width="17" height="15" rx="2.5" />
+      <path d="M3.5 10h17M8 3v4M16 3v4" />
+    </>
+  ),
+  train: (
+    <>
+      <path d="M11 3.5l1.9 5.1 5.1 1.9-5.1 1.9-1.9 5.1-1.9-5.1L4 10.5l5.1-1.9z" />
+      <path d="M18.5 15.5v5M16 18h5" />
+    </>
+  ),
+  map: (
+    <>
+      <circle cx="6" cy="7" r="2.25" />
+      <circle cx="18" cy="9.5" r="2.25" />
+      <circle cx="10.5" cy="18" r="2.25" />
+      <path d="M8.2 7.4l7.6 1.7M16.4 11.2l-4.3 5.1M6.8 9.1l2.6 6.8" />
+    </>
+  ),
+  more: (
+    <>
+      <circle cx="5.5" cy="12" r="1.25" fill="currentColor" />
+      <circle cx="12" cy="12" r="1.25" fill="currentColor" />
+      <circle cx="18.5" cy="12" r="1.25" fill="currentColor" />
+    </>
+  ),
+};
 
 export function CommandCenter() {
   const queue = useApi<QueueData>("/api/queue", 60_000);
@@ -114,6 +153,10 @@ export function CommandCenter() {
       "A little more you.",
       "Save feedback to your Personal Constitution in Notion for your Claude routines.",
     ],
+    map: [
+      "Your constitution, mapped.",
+      "Every position and source, clustered by domain. Click a node to inspect it.",
+    ],
     more: [
       "The bigger picture.",
       "Your performance, knowledge library, and automation settings.",
@@ -124,7 +167,7 @@ export function CommandCenter() {
       aria-label={mobile ? "Mobile navigation" : "Main navigation"}
       className={
         mobile
-          ? "mobile-navigation fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-hairline bg-white md:hidden"
+          ? "mobile-navigation fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-hairline bg-white/85 px-1 shadow-[0_-6px_20px_-12px_rgba(25,26,28,0.18)] backdrop-blur-md md:hidden"
           : "hidden items-center gap-1 md:flex"
       }
     >
@@ -135,16 +178,34 @@ export function CommandCenter() {
           aria-current={view === v.id ? "page" : undefined}
           className={
             mobile
-              ? `flex min-h-[72px] flex-col items-center justify-center gap-1 px-1 text-xs ${view === v.id ? "bg-oxblood/5 font-semibold text-oxblood" : "text-ink-dim"}`
+              ? `group flex min-h-[72px] min-w-0 flex-col items-center justify-center gap-1 px-0.5 text-[11px] leading-tight transition-colors ${view === v.id ? "font-semibold text-oxblood" : "text-ink-dim active:text-ink"}`
               : `btn ${view === v.id ? "bg-white text-oxblood shadow-sm" : "btn-quiet"}`
           }
         >
-          {mobile && (
-            <span aria-hidden="true" className="text-xl">
-              {v.icon}
-            </span>
+          {mobile ? (
+            <>
+              <span
+                aria-hidden="true"
+                className={`flex h-8 w-full max-w-14 items-center justify-center rounded-full transition-colors duration-200 ${view === v.id ? "bg-oxblood/10" : "group-hover:bg-ink/5 group-active:bg-ink/10"}`}
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  {VIEW_ICONS[v.id]}
+                </svg>
+              </span>
+              <span className="max-w-full truncate">{v.short}</span>
+            </>
+          ) : (
+            v.label
           )}
-          {v.label}
           {!mobile && v.id === "review" && data && (
             <span className="rounded-full bg-oxblood/10 px-2 py-0.5 text-xs text-oxblood">
               {data.drafts.length}
@@ -155,7 +216,7 @@ export function CommandCenter() {
     </nav>
   );
   return (
-    <div className="min-h-screen pb-28 md:pb-8">
+    <div className="min-h-screen pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-8">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-white focus:p-4"
@@ -342,13 +403,12 @@ export function CommandCenter() {
             </div>
             <aside className="order-1 space-y-5 lg:order-2 lg:sticky lg:top-6">
               <NovaCompanion
-                mood={nova.mood}
                 line={
                   data
                     ? nova.lines[0]
                     : "I’ll have your overview ready when the connection is back."
                 }
-                onTrain={() => navigate("train")}
+                onOpenMap={() => navigate("map")}
               />
               <FrameCard className="hidden p-5 lg:block">
                 <h2 className="font-semibold">Coming up</h2>
@@ -485,6 +545,7 @@ export function CommandCenter() {
             </TrainingSection>
           </div>
         )}
+        {view === "map" && <ConstitutionMap />}
         {view === "more" && (
           <div className="grid items-start gap-6 lg:grid-cols-2">
             <KpiPanel index={0} />

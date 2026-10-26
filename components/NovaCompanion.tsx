@@ -2,28 +2,26 @@
 
 import { useReducedMotion } from "framer-motion";
 import { useState } from "react";
-import { Nova, NovaMood } from "./Nova";
+import { ConstitutionMap } from "./ConstitutionMap";
 
 export function NovaCompanion({
-  mood,
   line,
-  onTrain,
+  onOpenMap,
 }: {
-  mood: NovaMood;
   line: string;
-  onTrain: () => void;
+  onOpenMap: () => void;
 }) {
   const reducedMotion = useReducedMotion();
   const [paused, setPaused] = useState(false);
   return (
-    <section className="nova-console" aria-label="Nova holographic companion">
+    <section className="nova-console" aria-label="Nova companion and constitution map">
       <div className="nova-console-header">
         <span className="flex items-center gap-2">
           <span
             aria-hidden="true"
             className="h-1.5 w-1.5 rounded-full bg-cyan-200"
           />
-          NOVA / COMPANION
+          NOVA / CONSTITUTION
         </span>
         {reducedMotion ? (
           <span className="nova-pause flex items-center">Reduced motion</span>
@@ -38,21 +36,20 @@ export function NovaCompanion({
         )}
       </div>
       <div className="nova-console-body">
-        <div className="nova-projection">
-          <div className="nova-orbit" aria-hidden="true" />
-          <Nova mood={mood} line="" paused={paused} />
+        <div className="nova-projection nova-map">
+          <ConstitutionMap compact paused={paused} onOpen={onOpenMap} />
         </div>
         <div className="nova-brief">
           <h2 className="text-sm font-semibold text-white">A note from Nova</h2>
           <p className="mt-2 text-sm leading-relaxed text-slate-300">{line}</p>
-          <button className="nova-train" onClick={onTrain}>
-            Train your twin <span aria-hidden="true">↗</span>
+          <button className="nova-train" onClick={onOpenMap}>
+            Explore the map <span aria-hidden="true">↗</span>
           </button>
         </div>
       </div>
       <div className="nova-console-footer" aria-hidden="true">
         <span>ISAAC TWIN</span>
-        <span>PERSONAL INTELLIGENCE</span>
+        <span>PERSONAL CONSTITUTION</span>
       </div>
     </section>
   );
