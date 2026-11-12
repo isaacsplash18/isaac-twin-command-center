@@ -15,7 +15,8 @@ import {
 } from "./types";
 
 const CHAR_LIMITS: Partial<Record<PlatformKey, number>> = {
-  x: 280,
+  // Account verified (X Premium) Nov 2026 — long-form posts up to 25k chars.
+  x: 25000,
   linkedin: 3000,
   substack: 600,
 };
